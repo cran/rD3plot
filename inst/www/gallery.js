@@ -14,6 +14,17 @@ function gallery(Graph){
   }
   options.colorScalenodeColor = "RdWhGn"; // default linear scale
 
+  var splitMultiVariable = function(d){
+      for(var p in d) {
+        if(p!=options.nodeName){
+          if(typeof d[p] == "string" && d[p].indexOf("|")!=-1){
+            var aux = d[p].split("|");
+            d[p] = aux.map(function(d){ return d=="" ? null : (isNaN(parseInt(d)) ? d : +d); });
+          }
+        }
+      }
+  }
+
   var nodes = [],
       len = Graph.nodes[0].length;
   for(var i = 0; i<len; i++){
@@ -21,8 +32,31 @@ function gallery(Graph){
       Graph.nodenames.forEach(function(d,j){
         node[d] = Graph.nodes[j][i];
       })
+      splitMultiVariable(node);
       node[options.nodeName] = String(node[options.nodeName]);
       nodes.push(node);
+  }
+
+  options.showTopbar = showControls(options,1);
+  options.showExport = showControls(options,2);
+
+  var topFilterInst = topFilter()
+    .data(nodes)
+    .datanames(getSelectOptions(sortAsc))
+    .attr(options.nodeName)
+    .displayGraph(displayGraph);
+
+  var frequencyBars = false;
+  if(options.frequencies){
+      options.frequencies = false;
+      frequencyBars = displayFreqBars()
+        .nodenames(getSelectOptions().filter(function(d){ return d!=options.nodeName; }))
+        .updateSelection(displayGraph)
+        .filterHandler(topFilterInst)
+        .applyColor(function(val){
+          colorSelect.property("value",val)
+                     .dispatch("change");
+        })
   }
 
   d3.selectAll("html, body")
@@ -31,6 +65,12 @@ function gallery(Graph){
 
   var body = d3.select("body");
 
+  if(options.cex){
+      body.style("font-size", 10*options.cex + "px")
+  }else{
+      options.cex = 1;
+  }
+
   var infoPanel = displayInfoPanel();
   body.call(infoPanel);
 
@@ -38,7 +78,7 @@ function gallery(Graph){
     if(!body.select("body > div.window-background").empty()){
       return;
     }
-    if(d3.event.ctrlKey){
+    if(d3.event.ctrlKey || d3.event.metaKey){
       var key = getKey(d3.event);
       switch(key){
         case "+":
@@ -85,14 +125,15 @@ function gallery(Graph){
   });
 
   var galleryBox = body.append("div")
-        .attr("class","gallery-box")
+        .attr("class","gallery-box"+(options.showTopbar ? "" : " hide-topbar"))
 
   // top bar
-  var topBar = galleryBox.append("div")
-        .attr("class","topbar")
+  var topBar = displayTopBar()
+    .title(options.main);
+  galleryBox.call(topBar);
 
   if(options.help){
-      topBar.call(iconButton()
+      topBar.addIcon(iconButton()
         .alt("help")
         .width(24)
         .height(24)
@@ -101,7 +142,8 @@ function gallery(Graph){
         .job(function(){ infoPanel.changeInfo(options.help); }));
   }
 
-  topBar.call(iconButton()
+  if(options.showExport){
+    topBar.addIcon(iconButton()
         .alt("pdf")
         .width(24)
         .height(24)
@@ -109,48 +151,54 @@ function gallery(Graph){
         .title(texts.pdfexport)
         .job(gallery2pdf));
 
-  topBar.call(iconButton()
+    topBar.addIcon(iconButton()
         .alt("xlsx")
         .width(24)
         .height(24)
         .src(b64Icons.xlsx)
         .title(texts.downloadtable)
         .job(nodes2xlsx));
-
-  if(options.main){
-    topBar.append("h2").text(options.main)
-    topBar.append("span").attr("class","separator");
   }
 
-  // multigraph
-  if(typeof multiGraph != 'undefined'){
-      topBar.append("h3").text(texts.graph + ":")
-      multiGraph.graphSelect(topBar);
-      topBar.append("span").attr("class","separator");
+  if(frequencyBars){
+      topBar.addIcon(iconButton()
+        .alt("freq")
+        .width(24)
+        .height(24)
+        .src(b64Icons.chart)
+        .title("frequencies")
+        .job(function(){
+          options.frequencies = true;
+          displayGraph();
+        }));
   }
 
   // node multi search
-  topBar.call(displayMultiSearch()
+  topBar.addBox(displayMultiSearch()
         .data(nodes)
         .column(options.nodeLabel)
         .update(displayGraph)
         .update2(filterSelection)
         .filterData(filterNodes));
 
-  topBar.append("span").attr("class","separator");
-
   // count elements
-  topBar.append("h3").text(texts.Elements + ":")
-  var elementsCount = topBar.append("span").attr("class","elements-count");
-  topBar.append("span").attr("class","separator");
+  var elementsCount;
+  topBar.addBox(function(box){
+    box.append("h3").text(texts.Elements + ":")
+    elementsCount = box.append("span").attr("class","elements-count");
+  });
 
   // node order
-  topOrder(topBar,nodes,displayGraph);
+  topBar.addBox(function(box){
+    topOrder(box,nodes,displayGraph);
+  });
 
   // colors
-  topBar.append("h3").text(texts.Color + ":")
+  var colorSelect;
+  topBar.addBox(function(box){
+    box.append("h3").text(texts.Color + ":")
 
-  var colorSelect = topBar.append("div")
+    colorSelect = box.append("div")
       .attr("class","select-wrapper")
     .append("select")
     .on("change",function(){
@@ -162,55 +210,94 @@ function gallery(Graph){
       }
       displayGraph();
     })
-  var opt = getSelectOptions(sortAsc).map(function(d){ return [d,d]; });
-  opt.unshift(["_none_","-"+texts.none+"-"]);
-  colorSelect.selectAll("option")
+    var opt = getSelectOptions(sortAsc).map(function(d){ return [d,d]; });
+    opt.unshift(["_none_","-"+texts.none+"-"]);
+    colorSelect.selectAll("option")
         .data(opt)
       .enter().append("option")
         .property("value",function(d){ return d[0]; })
         .text(function(d){ return d[1]; })
-        .property("selected",function(d){ return d==options.nodeColor ? true : null; })
-  topBar.append("span").attr("class","separator");
+        .property("selected",function(d){ return d[0]==options.nodeColor ? true : null; })
+  });
+
+  // Deselect
+  topBar.addBox(function(box){
+    box.append("button")
+      .attr("class","primary")
+      .text(texts.Deselect)
+      .on("click",deselectAllItems)
+  })
 
   // filter selection
-  topBar.append("button")
-    .attr("class","primary")
-    .text(texts.filterselection)
-    .on("click",filterSelection)
-
-  topBar.append("span").attr("class","separator");
+  topBar.addBox(function(box){
+    box.append("button")
+      .attr("class","primary")
+      .text(texts.filterselection)
+      .on("click",filterSelection)
+  });
 
   // node filter in topBar
-  var topFilterInst = topFilter()
-    .data(nodes)
-    .datanames(getSelectOptions(sortAsc))
-    .attr(options.nodeName)
-    .displayGraph(displayGraph);
-  topBar.call(topFilterInst);
+  topBar.addBox(topFilterInst);
+
 
   var content = galleryBox.append("div")
         .attr("class","gallery-content");
 
+  var descriptionPanel = false;
+  if(options.description || frequencyBars){
+    var displayInDescription = function(info){
+        descriptionPanel.select(".description-content").html(info ? info : options.description);
+        descriptionPanel.select(".close-button").style("display",info ? "block" : "none");
+        content.classed("hide-description",false);
+    }
+
+    descriptionPanel = content.append("div")
+        .attr("class","description-panel")
+    descriptionPanel.append("div")
+      .attr("class","close-button")
+      .on("click",function(){
+        if(options.description){
+          displayInDescription();
+        }else{
+          content.classed("hide-description",true);
+        }
+        if(frequencyBars){
+          options.frequencies = false;
+        }
+      })
+    descriptionPanel.append("div")
+      .attr("class","description-content");
+    if(options.description){
+      displayInDescription();
+    }else{
+      content.classed("hide-description",true);
+    }
+  }
+
   var gallery = content.append("div")
         .attr("class","grid-gallery");
 
-  gallery.on("click",function(){
-    nodes.forEach(function(n){ delete n.selected; });
-    displayGraph();
-  });
+  if(descriptionPanel && options.descriptionWidth){
+      descriptionPanel.style("width",options.descriptionWidth+"%")
+      gallery.style("width",(100-options.descriptionWidth)+"%")
+  }
+
+  gallery.on("click",deselectAllItems);
 
   if(!options.hasOwnProperty("zoom"))
     options.zoom = 1;
 
+  var getCurrentHeight = function(k){ return gridHeight * k; };
+
   var zoom = d3.zoom()
-      .filter(function(){ return d3.event.ctrlKey; })
+      //.filter(function(){ return d3.event.ctrlKey || d3.event.metaKey; })
       .scaleExtent(zoomRange)
       .on("zoom", function(){
-        currentGridHeight = gridHeight*d3.event.transform.k;
+        currentGridHeight = getCurrentHeight(d3.event.transform.k);
         displayGraph();
       })
 
-  gallery.call(zoom);
+  //gallery.call(zoom);
 
   var galleryItems = gallery.append("div")
         .attr("class","gallery-items fade-labels")
@@ -231,11 +318,10 @@ function gallery(Graph){
                    }));
   var legendPanel = content.append("div")
         .attr("class","legend-panel")
+        .classed("hide-legend",!options.showLegend)
         .on("click",function(){
           d3.event.stopPropagation();
         })
-
-  resetZoom();
 
   var zoomsvg = content.append("div")
     .attr("class","zoom-svg")
@@ -258,10 +344,51 @@ function gallery(Graph){
     var note = galleryBox.append("div")
       .attr("class","gallery-note")
       .html(options.note)
+  }else{
+    galleryBox.append("div")
+      .attr("class","footer")
+      .html("&copy; "+new Date().getFullYear()+" NETCOIN PROJECT")
   }
 
-  if(options.help){
+  if(options.help && options.helpOn){
     infoPanel.changeInfo(options.help);
+  }
+
+  if(options.itemsPerRow){
+    options.zoom = 1;
+
+    var currentItemsPerRow = options.itemsPerRow,
+        prevk = options.zoom,
+        sizeByItemsPerRow = function(itemsPerRow){
+          var w = Math.floor((gallery.node().offsetWidth-12) / itemsPerRow)-18;
+          return w/options.aspectRatio;
+        }
+    
+    getCurrentHeight = function(k){
+          if(k == 1){
+            currentItemsPerRow = options.itemsPerRow;
+          }else{
+            if(k < prevk){
+              currentItemsPerRow = currentItemsPerRow+1;
+            }else if(k > prevk){
+              currentItemsPerRow = currentItemsPerRow-1;
+            }
+          }
+          prevk = k;
+          return sizeByItemsPerRow(currentItemsPerRow);
+    }
+
+    // check aspect ratio
+    var img = new Image();
+    img.onload = function() {
+      options.aspectRatio = getImgRatio(this);
+      currentGridHeight = sizeByItemsPerRow(currentItemsPerRow);
+      gridHeight = currentGridHeight;
+      resetZoom();
+    }
+    img.src = nodes[0][options.imageItems];
+  }else{
+    resetZoom();
   }
 
   function resetZoom(){
@@ -281,12 +408,7 @@ function gallery(Graph){
       data.sort(function(a,b){
         var aa = a[options.order],
             bb = b[options.order];
-        if(options.rev){
-          var aux = bb;
-          bb = aa;
-          aa = aux;
-        }
-        return aa < bb ? -1 : aa > bb ? 1 : aa >= bb ? 0 : NaN;
+        return compareFunction(aa,bb,options.rev);
       })
     }
 
@@ -299,11 +421,10 @@ function gallery(Graph){
           .attr("class","img-wrapper")
     if(options.imageItems){
       imgWrapper.append("img")
-          .on("load", function(){
-            itemWidth(d3.select(this.parentNode.parentNode),imgWidth(this));
-          })
-          .on("error", function(){
-            itemWidth(d3.select(this.parentNode.parentNode),currentGridHeight);
+          .on("load", options.aspectRatio ? function(){
+            imgMarginLeft(this,getImgRatio(this));
+          } : function(){
+            itemWidth(d3.select(this.parentNode.parentNode),getImgRatio(this));
           })
           .attr("src",function(n){ return n[options.imageItems]; });
     }
@@ -312,45 +433,27 @@ function gallery(Graph){
         .attr("title",function(d){ return d[options.nodeLabel]; })
         .text(function(d){ return d[options.nodeLabel]; })
 
-    itemsEnter.style("cursor","pointer")
-      .on("click",function(n){
-          d3.event.stopPropagation();
-          if(d3.event.ctrlKey){
-            if(n.selected){
-              delete n.selected;
-            }else{
-              n.selected = true;
-            }
-          }else if(d3.event.shiftKey){
-            n.selected = true;
-            var ext = d3.extent(data.map(function(d,i){ return [i,d.selected]; }).filter(function(d){ return d[1]; }).map(function(d){ return d[0]; }));
-            d3.range(ext[0],ext[1]).forEach(function(i){
-              data[i].selected = true;
-            });
-          }else{
-            data.forEach(function(n){ delete n.selected; });
-            n.selected = true;
-          }
-          displayGraph();
-          if(options.nodeInfo){
-            infoPanel.changeInfo(n[options.nodeInfo]);
-          }
-      })
-
     if(options.nodeText){
       itemsEnter.each(function(d){
         if(d[options.nodeText]){
           var tooltip = d3.select(this).append("div")
             .attr("class","tooltip")
             .style("display","none")
-            .text(d[options.nodeText])
+            .html(d[options.nodeText])
             
           d3.select(this)
               .on("mouseenter",function(){
                 tooltip.style("display","block");
+                if(d3.mouse(gallery.node())[0]>(gallery.node().offsetWidth/2)){
+                  tooltip
+                    .style("left","unset")
+                    .style("right",0);
+                }
               })
               .on("mouseleave",function(){
-                tooltip.style("display","none");
+                tooltip.style("display","none")
+                  .style("left",null)
+                  .style("right",null);
               })
         }
       });
@@ -368,14 +471,47 @@ function gallery(Graph){
         .style("height",currentGridHeight+"px")
     itemsUpdate.each(function(){
       var item = d3.select(this),
-          w = currentGridHeight;
-      if(options.imageItems){
-        w = imgWidth(item.select(".img-wrapper > img").node());
+          ratio = 1;
+      if(options.aspectRatio){
+        ratio = options.aspectRatio;
+      }else if(options.imageItems){
+        var img = item.select(".img-wrapper > img").node();
+        ratio = getImgRatio(img);
       }
-      itemWidth(item,w);
+      itemWidth(item,ratio);
     })
 
-    itemsUpdate.selectAll("span, .tooltip").style("font-size",(currentGridHeight/gridHeight)*0.8+"em")
+    itemsUpdate.selectAll(".item > span").style("font-size",(currentGridHeight/72)+"em")
+
+    itemsUpdate.style("cursor","pointer")
+      .on("click",function(n){
+          d3.event.stopPropagation();
+          if(d3.event.ctrlKey || d3.event.metaKey){
+
+            if(n.selected){
+              delete n.selected;
+            }else{
+              n.selected = true;
+            }
+          }else if(d3.event.shiftKey){
+            n.selected = true;
+            var ext = d3.extent(data.map(function(d,i){ return [i,d.selected]; }).filter(function(d){ return d[1]; }).map(function(d){ return d[0]; }));
+            d3.range(ext[0],ext[1]).forEach(function(i){
+              data[i].selected = true;
+            });
+          }else{
+            data.forEach(function(n){ delete n.selected; });
+            n.selected = true;
+          }
+          displayGraph();
+          if(options.nodeInfo){
+            if(descriptionPanel && !options.frequencies){
+              displayInDescription(n[options.nodeInfo]);
+            }else{
+              infoPanel.changeInfo(n[options.nodeInfo]);
+            }
+          }
+      })
 
     var colorScale;
     if(options.nodeColor){
@@ -405,6 +541,23 @@ function gallery(Graph){
               return node[options.nodeColor];
             }).keys())
         }
+        if(type=="object"){
+          var values = [];
+          nodes.forEach(function(node){
+            if(node[options.nodeColor]){
+              if(typeof node[options.nodeColor] == "string"){
+                values.push(node[options.nodeColor]);
+              }else{
+                node[options.nodeColor].forEach(function(v){
+                  values.push(v);
+                })
+              }
+            }
+          });
+          colorScale = d3.scaleOrdinal()
+            .range(categoryColors)
+            .domain(d3.set(values).values())
+        }
       }
     }
     legend
@@ -429,27 +582,53 @@ function gallery(Graph){
       })
     }
 
+    if(descriptionPanel && frequencyBars && options.frequencies){
+      frequencyBars
+            .nodes(data)
+            .nodeColor(options.nodeColor)
+            .colorScale(colorScale);
+      content.classed("hide-description",false);
+      frequencyBars(descriptionPanel.select(".description-content").html(""));
+      descriptionPanel.select(".close-button").style("display","block");
+    }
+
     function applyColorScale(scale, value){
       if(value == null){
         return basicColors.white;
       }
+      if(typeof value == "object"){
+        value = value[0];
+      }
       return scale(value);
     }
 
-    function imgWidth(img){
-      var ratio = 1;
-      if(img.complete && img.naturalHeight!==0){
-        ratio = img.naturalWidth / img.naturalHeight;
-      }
-      return currentGridHeight*ratio;
-    }
-
-    function itemWidth(item,w){
+    function itemWidth(item,ratio){
       var wrapperBorderWidth = 0;
       ["left","right"].forEach(function(d){
         wrapperBorderWidth += parseInt(item.select(".img-wrapper").style("border-"+d+"-width"));
       })
-      item.style("width",(w + wrapperBorderWidth)+"px");
+      item.style("width",((currentGridHeight*ratio) + wrapperBorderWidth)+"px");
+    }
+
+    function imgMarginLeft(img,ratio){
+        var ml = (100 - (100/options.aspectRatio*ratio)) / 2;
+        d3.select(img).style("margin-left",ml+"%");
+    }
+  }
+
+  function getImgRatio(img){
+      var ratio = 1;
+      if(img.complete && img.naturalHeight!==0){
+        ratio = img.naturalWidth / img.naturalHeight;
+      }
+      return ratio;
+  }
+
+  function deselectAllItems(){
+    nodes.forEach(function(n){ delete n.selected; });
+    displayGraph();
+    if(descriptionPanel && options.description && !options.frequencies){
+      displayInDescription();
     }
   }
 
@@ -460,7 +639,11 @@ function gallery(Graph){
         .map(function(n){
           return n[options.nodeName];
         });
-      topFilterInst.newFilter(options.nodeName,values);
+      if(!values.length){
+        topFilterInst.removeFilter();
+      }else{
+        topFilterInst.newFilter(options.nodeName,values);
+      }
   }
 
   function filterNodes(n){
@@ -468,16 +651,16 @@ function gallery(Graph){
   }
 
   function getSelectOptions(order){
-    return Graph.nodenames.filter(function(d){ return d.substring(0,1)!="_"; })
-        .filter(function(d){ return !options.imageItems || d!=options.imageItems; })
+    return Graph.nodenames.filter(function(d){
+          return d.substring(0,1)!="_" && d!=options.nodeText && d!=options.nodeInfo && (!options.imageItems || d!=options.imageItems); 
+        })
         .sort(order ? order : function(){ return 0; });
   }
 
-  function topOrder(topBar,data,displayGraph){
+  function topOrder(div,data,displayGraph){
 
-    topBar.append("h3").text(texts.Order + ":")
-
-    var selOrder = topBar.append("div")
+    div.append("h3").text(texts.Order + ":")
+    var selOrder = div.append("div")
       .attr("class","select-wrapper")
     .append("select")
     .on("change",function(){
@@ -498,9 +681,9 @@ function gallery(Graph){
         .property("value",String)
         .text(String)
 
-    topBar.append("h3")
+    div.append("h3")
     .text(texts.Reverse)
-    topBar.append("button")
+    div.append("button")
     .attr("class","switch-button")
     .classed("active",options.rev)
     .on("click",function(){
@@ -508,8 +691,6 @@ function gallery(Graph){
       d3.select(this).classed("active",options.rev);
       displayGraph();
     })
-
-    topBar.append("span").attr("class","separator");
   }
 
   function displayLegend(){
@@ -523,7 +704,7 @@ function gallery(Graph){
         scalePicker;
 
     function exports(parent){
-      if(!value){
+      if(!value || !scale){
         parent.selectAll("*").remove();
         return;
       }
@@ -532,26 +713,32 @@ function gallery(Graph){
         .visual(type)
         .active(value)
 
+      displayShowPanelButton(parent,function(){
+        parent.classed("hide-legend",false);
+      })
+
       // ordinal scale
       if(scale.name=="i"){
         parent.select("div.scale").remove();
 
-        var legends = parent.select(".legends"),
-            showPanelButton = parent.select(".show-panel-button");
+        var legends = parent.select(".legends");
 
         var initialize = false;
         if(legends.empty()){
           initialize = true;
 
-          var showPanelButton = parent.append("div").attr("class","show-panel-button");
-          showPanelButton.append("span");
-          showPanelButton.append("span");
-          showPanelButton.append("span");
-          showPanelButton.on("click",function(){
-            parent.classed("hide-legend",false);
-          })
-
           legends = parent.append("div").attr("class","legends");
+          legends.style("opacity",0.8)
+            .on("mouseenter",function(){
+              d3.select(this).transition()
+                  .duration(500)
+                  .style("opacity",1);
+            })
+            .on("mouseleave",function(){
+              d3.select(this).transition()
+                  .duration(500)
+                  .style("opacity",0.8);
+            })
           legends.append("div")
             .attr("class","highlight-header")
             .text(texts.Legend)
@@ -587,7 +774,7 @@ function gallery(Graph){
         }
         legend.select(".title").text(texts[type] + " / " + value);
 
-        var itemsData = d3.map(data.filter(function(d){ return d[value]!==null; }), function(d){ return d[value]; }).keys().sort(sortAsc);
+        var itemsData = getColumnValues(data,value);
 
         var items = legend.selectAll(".legend-item")
               .data(itemsData,String)
@@ -599,8 +786,14 @@ function gallery(Graph){
             .on("click",function(v){
               var checked = d3.select(this).select(".legend-check-box").classed("checked");
               data.forEach(function(d){
-                if(String(d[value])==v){
-                  d.selected = !checked ? true : false;
+                if(Array.isArray(d[value])){
+                  if(d[value].indexOf(v)!=-1){
+                    d.selected = !checked;
+                  }
+                }else{
+                  if(String(d[value])==v){
+                    d.selected = !checked;
+                  }
                 }
               })
               displayGraph();
@@ -611,8 +804,8 @@ function gallery(Graph){
 
         itemsEnter.append("div")
         .attr("class","legend-bullet")
-        .style("background-color",function(d){
-          return scale(d);
+        .style("background-color",function(value){
+          return scale(value);
         })
 
         itemsEnter.append("span")
@@ -626,7 +819,11 @@ function gallery(Graph){
         itemsUpdate.select(".legend-check-box")
         .classed("checked",function(v){
           var aux = data.filter(function(d){
-            return String(d[value])==v;
+            if(Array.isArray(d[value])){
+              return d[value].indexOf(v)!=-1;
+            }else{
+              return String(d[value])==v;
+            }
           });
           if(aux.length){
             return aux.filter(function(d){
@@ -637,7 +834,7 @@ function gallery(Graph){
         })
 
         var legendsHeight = parent.node().parentNode.offsetHeight-250;
-        content.style("height",content.node().offsetHeight>legendsHeight ? legendsHeight+"px" : null)
+        content.style("height",legend.node().offsetHeight>legendsHeight ? legendsHeight+"px" : null)
 
         if(initialize){
           var legendBottomControls = legends.append("div")
@@ -685,14 +882,14 @@ function gallery(Graph){
       // linear scale
       if(scale.name=="h"){
         parent.select("div.legends").remove();
-        parent.select(".show-panel-button").remove();
         
         displayLinearScale(parent,
           value,
           scale.range(),
           scale.domain(),
           scalePicker,
-          selectionWindow
+          selectionWindow,
+          function(){ parent.classed("hide-legend",true); }
         );
       }
     }

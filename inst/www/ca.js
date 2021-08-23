@@ -107,5 +107,9 @@ var texts = {
     filterInfo: "Permet veure el node (o nodes) seleccionat i la seva xarxa (nodes amb els quals està relacionat)",
     selectcustomcolor: "Selecciona un color personalitzat",
     filterselection: "Filtrar selecció",
-    Elements: "Elements"
+    Elements: "Elements",
+    Deselect: "Desmarcar",
+    more: "més",
+    less: "menys",
+    Scale: "Escala"
   };

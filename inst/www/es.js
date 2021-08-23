@@ -107,5 +107,9 @@ var texts = {
     filterInfo: "Permite ver el nodo (o nodos) seleccionado y su red (nodos con los que está relacionado)",
     selectcustomcolor: "Selecciona un color personalizado",
     filterselection: "Filtrar selección",
-    Elements: "Elementos"
+    Elements: "Elementos",
+    Deselect: "Desmarcar",
+    more: "más",
+    less: "menos",
+    Scale: "Escala"
   };

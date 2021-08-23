@@ -102,7 +102,6 @@ toJSON <- function(x){
     n <- suppressWarnings(as.numeric(x))
     if(is.na(n)){
       x <- gsub("[[:cntrl:]]","",x)
-      x <- tryCatch(gsub("[\U010000-\U10FFFF]","",x),error=function(cond){ return(x) })
       x <- deparse(x)
       if(l10n_info()[["Latin-1"]]){
         x <- gsub("([^\\])\\\\[0-7]{3}","\\1_",x)
@@ -199,6 +198,16 @@ checkLanguage <- function(language){
       language <- "en"
   }
   return(language)
+}
+
+check_cex <- function(cex){
+  if(!is.numeric(cex)){
+    cex <- 1
+    warning("cex: must be numeric")
+  }else if(cex>2){
+    warning("cex: the font may be too large for proper display")
+  }
+  return(cex)
 }
 
 tempDir <- function(){
@@ -382,7 +391,7 @@ showSomething <- function(opt,item,show){
 }
 
 # igraph -> network_rd3
-fromIgraph <- function(G, ...){
+rd3_fromIgraph <- function(G, ...){
   if (inherits(G,"igraph")){
 
     #arguments
@@ -434,7 +443,7 @@ fromIgraph <- function(G, ...){
 }
 
 # network_rd3 -> igraph
-toIgraph <- function(net){
+rd3_toIgraph <- function(net){
   if (inherits(net,"network_rd3")){
     nodes <- net$nodes
     links <- net$links

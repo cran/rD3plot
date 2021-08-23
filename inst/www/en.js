@@ -107,5 +107,9 @@ var texts = {
     filterInfo: "Allows you to see the selected node (or nodes) and its network (nodes with which it is related)",
     selectcustomcolor: "Select a custom color",
     filterselection: "Filter selection",
-    Elements: "Elements"
+    Elements: "Elements",
+    Deselect: "Deselect",
+    more: "more",
+    less: "less",
+    Scale: "Scale"
   };

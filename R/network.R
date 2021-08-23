@@ -14,11 +14,8 @@ networkJSON<-function(net){
 
     idx <- seq_along(name)-1
     names(idx) <- name
-    source <- idx[as.character(links$Source)]
-    target <- idx[as.character(links$Target)]
-
-    links$Source <- source
-    links$Target <- target
+    links[[options$linkSource]] <- idx[as.character(links[[options$linkSource]])]
+    links[[options$linkTarget]] <- idx[as.character(links[[options$linkTarget]])]
   }
 
   #prepare tree
@@ -134,8 +131,6 @@ imgWrapper <- function(net,callback,dir){
       dir.create(imgDir, showWarnings = FALSE)
       file.copy(filepath, paste(imgDir,rawname,sep="/"))
       net$options[["background"]] <- paste0('url("',paste("images",rawname,sep="/"),'")')
-    }else{
-      warning("missing background image file")
     }
   }
   return(callback(net))
@@ -221,11 +216,7 @@ network_rd3 <- function(nodes = NULL, links = NULL, tree = NULL,
   
   # graph options
 
-  if(!is.numeric(cex)){
-    cex <- formals(network_rd3)[["cex"]]
-    warning("cex: must be numeric")
-  }
-  options[["cex"]] <- cex
+  options[["cex"]] <- check_cex(cex)
 
   if(!(is.numeric(distance) && distance>=0 && distance<=100)){
     distance <- formals(network_rd3)[["distance"]]
@@ -408,8 +399,8 @@ network_rd3 <- function(nodes = NULL, links = NULL, tree = NULL,
     if(is.character(layout)){ 
       layoutName <- layoutControl(layout)
       if(exists("layoutName")){
-        if(layoutName=="fo") layout <- coords[[layoutName]](toIgraph(net), criteria=lweight) 
-        else layout <- coords[[layoutName]](toIgraph(net))
+        if(layoutName=="fo") layout <- coords[[layoutName]](rd3_toIgraph(net), criteria=lweight) 
+        else layout <- coords[[layoutName]](rd3_toIgraph(net))
         if(layoutName=="su")layout=layout$layout
       }
     }
@@ -419,7 +410,7 @@ network_rd3 <- function(nodes = NULL, links = NULL, tree = NULL,
   #community
   community <- congloControl(community)
   if (!is.null(community)) {
-    net$nodes$community <- igraph::membership(conglos[[community]](toIgraph(net)))
+    net$nodes$community <- igraph::membership(conglos[[community]](rd3_toIgraph(net)))
     net$nodes$community <- paste0("G.",sprintf(paste0("%0",nchar(max(net$nodes$community)),"d"),net$nodes$community))
     if (!("community" %in% unlist(net$options[c("nodeShape","nodeColor")])))
        net$options$nodeGroup <- "community"

@@ -9,14 +9,20 @@ galleryJSON <- function(gallery){
 
 galleryCreate <- function(gallery, dir){
   language <- getLanguageScript(gallery)
-  createHTML(dir, c("reset.css","styles.css"), c("d3.min.js","jspdf.min.js","jszip.min.js","html2canvas.min.js","functions.js",language,"colorScales.js","gallery.js"), function(){ return(imgWrapper(gallery,galleryJSON,dir)) })
+  scripts <- c("d3.min.js","jspdf.min.js","jszip.min.js","html2canvas.min.js","functions.js",language,"colorScales.js","gallery.js")
+  if(!is.null(gallery$options$frequencies)){
+    scripts <- c(scripts,"d3.layout.cloud.js")
+  }
+  createHTML(dir, c("reset.css","styles.css"), scripts, function(){ return(imgWrapper(gallery,galleryJSON,dir)) })
 }
 
 gallery_rd3 <- function(nodes, name = NULL, label = NULL, color = NULL,
-    ntext = NULL, info = NULL, image = NULL,
-    zoom = 1, main = NULL, note = NULL, help = NULL,
-    roundedItems = FALSE,
-    language = c("en", "es", "ca"), dir = NULL){
+    ntext = NULL, info = NULL, image = NULL, zoom = 1,
+    itemsPerRow = NULL, main = NULL, note = NULL,
+    showLegend = TRUE, frequencies = FALSE,
+    help = NULL, helpOn = FALSE, description = NULL,
+    descriptionWidth = NULL, roundedItems = FALSE, controls = 1:2,
+    cex = 1, language = c("en", "es", "ca"), dir = NULL){
   if(is.null(name)){
     name <- colnames(nodes)[1]
   }
@@ -38,10 +44,35 @@ gallery_rd3 <- function(nodes, name = NULL, label = NULL, color = NULL,
   }
   options[["zoom"]] <- zoom
 
+  if(!is.null(itemsPerRow)){
+    if(!is.numeric(itemsPerRow) || itemsPerRow<=0){
+      warning("itemsPerRow: must be numeric greater than 0")
+    }else{
+      options[["itemsPerRow"]] <- itemsPerRow
+    }
+  }
   if (!is.null(main)) options[["main"]] <- main
   if (!is.null(note)) options[["note"]] <- note
   if (!is.null(help)) options[["help"]] <- help
-  if (roundedItems) options[["roundedItems"]] <- TRUE
+  if (!is.null(description)) options[["description"]] <- description
+  if (!is.null(descriptionWidth)){
+    if(is.numeric(descriptionWidth) && descriptionWidth>=0 && descriptionWidth<=100){
+      options[["descriptionWidth"]] <- descriptionWidth
+    }else{
+      warning("descriptionWidth: not a valid percentage.")
+    }
+  }
+  options <- showSomething(options,"roundedItems",roundedItems)
+  options <- showSomething(options,"showLegend",showLegend)
+  options <- showSomething(options,"helpOn",helpOn)
+  options <- showSomething(options,"frequencies",frequencies)
+
+  if (!is.null(controls)) options[["controls"]] <- as.numeric(controls)
+  if(!is.numeric(cex)){
+    cex <- formals(gallery_rd3)[["cex"]]
+    warning("cex: must be numeric")
+  }
+  options[["cex"]] <- check_cex(cex)
   options[["language"]] <- checkLanguage(language)
 
   if (!is.null(image)){
@@ -63,16 +94,3 @@ gallery_rd3 <- function(nodes, name = NULL, label = NULL, color = NULL,
   return(gallery)
 }
 
-asGallery <- function(net){
-  if(inherits(net,"network_rd3")){
-    nodes <- net$nodes
-    options <- net$options
-    gallery <- gallery_rd3(nodes = nodes, name = options$nodeName, label = options$nodeLabel,
-      color = options$nodeColor, ntext = options$nodeText, info = options$nodeInfo, image = options$imageItems,
-      zoom = options$zoom, main = options$main, note = options$note, help = options$help,
-      language = options$language)
-    return(gallery)
-  }else{
-    stop("net: must be a network object")
-  }
-}
