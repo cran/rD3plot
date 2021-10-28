@@ -301,7 +301,11 @@ network_rd3 <- function(nodes = NULL, links = NULL, tree = NULL,
   }
   options <- checkColumn(options,"nodeLabelSize",labelSize)
   options <- checkColumn(options,"nodeGroup",group)
-  options <- checkColumn(options,"nodeSize",size)
+  if(is.numeric(size)){
+    options[["defaultNodeSize"]] <- size
+  }else{
+    options <- checkColumn(options,"nodeSize",size)
+  }
   options <- checkColumn(options,"nodeLegend",legend)
   options <- checkColumn(options,"nodeText",ntext)
   options <- checkColumn(options,"nodeInfo",info)
@@ -325,7 +329,6 @@ network_rd3 <- function(nodes = NULL, links = NULL, tree = NULL,
   # link options
   options <- checkColumn(options,"linkWidth",lwidth)
   options <- checkColumn(options,"linkWeight",lweight)
-  options <- checkColumn(options,"linkColor",lcolor)
   options <- checkColumn(options,"linkText",ltext)
   options <- checkColumn(options,"linkIntensity",intensity)
 
@@ -381,8 +384,9 @@ network_rd3 <- function(nodes = NULL, links = NULL, tree = NULL,
   net <- structure(list(links=links,nodes=nodes,options=options),class="network_rd3")
 
   #more options
-  net <- checkNodeVariable(net,"nodeColor",color,"color",isColor,categoryColors,col2hex)
-  net <- checkNodeVariable(net,"nodeShape",shape,"shape",isShape,getShapes,capitalize)
+  net <- checkItemValue(net,"nodes","nodeColor",color,"color",isColor,categoryColors,col2hex)
+  net <- checkItemValue(net,"nodes","nodeShape",shape,"shape",isShape,getShapes,capitalize)
+  net <- checkItemValue(net,"links","linkColor",lcolor,"lcolor",isColor,categoryColors,col2hex)
 
   #check tree
   if(!is.null(tree)){
