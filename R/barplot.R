@@ -4,7 +4,7 @@ barplotJSON <- function(bar){
 
 barCreate <- function(bar, dir){
   language <- getLanguageScript(bar)
-  createHTML(dir, c("reset.css","styles.css"), c("d3.min.js","jspdf.min.js","functions.js",language,"colorScales.js","barplot.js"), barplotJSON(bar))
+  createHTML(dir, c("reset.css","styles.css"), c("d3.min.js","jspdf.min.js","images.js","colorScales.js","functions.js",language,"barplot.js"), barplotJSON(bar))
 }
 
 barplot_rd3 <- function(events, links, name = NULL, select = NULL,
@@ -38,7 +38,7 @@ barplot_rd3 <- function(events, links, name = NULL, select = NULL,
   }
   links <- cbind(Source=as.character(links[,source]), Target=as.character(links[,target]), links[,setdiff(colnames(links),c(source,target)), drop=FALSE])
 
-  options <- list(name = name, incidences = incidences, coincidences = coincidences, defaultColor = defaultColor, cex = check_cex(cex), language = checkLanguage(language))
+  options <- list(name = name, incidences = incidences, coincidences = coincidences, defaultColor = check_defaultColor(defaultColor[1]), cex = check_cex(cex), language = checkLanguage(language))
 
   if(!is.null(note)){
       options[["note"]] <- note

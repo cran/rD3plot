@@ -14,6 +14,18 @@ print.gallery_rd3 <- function(x, ...) {
   printNetwork(x)
 }
 
+print.pie_rd3 <- function(x, ...) {
+  aux <- x$data
+  if(!is.null(x$labels)){
+    names(aux) <- x$labels
+  }
+  print(aux)
+}
+
+print.multi_rd3 <- function(x, ...) {
+  print(paste0("A collection of ",length(x$graphs)," graphs"))
+}
+
 printMain <- function(x){
   if(!is.null(x$options$main)){
     cat("Title:",x$options$main,"\n")
@@ -55,24 +67,57 @@ printTimeline <- function(x){
 }
 
 plot.network_rd3 <- function(x, dir = tempDir(), ...){
-  plotObj(x, dir, netCreate)
+  plotObj(x, dir)
 }
 
 plot.barplot_rd3 <- function(x, dir = tempDir(), ...){
-  plotObj(x, dir, barCreate)
+  plotObj(x, dir)
 }
 
 plot.timeline_rd3 <- function(x, dir = tempDir(), ...){
-  plotObj(x, dir, timeCreate)
+  plotObj(x, dir)
 }
 
 plot.gallery_rd3 <- function(x, dir = tempDir(), ...){
-  plotObj(x, dir, galleryCreate)
+  plotObj(x, dir)
 }
 
-plotObj <- function(x,dir,callback){
-     callback(x,dir)
-     browseURL(normalizePath(paste(dir, "index.html", sep = "/")))
+plot.pie_rd3 <- function(x, dir = tempDir(), ...){
+  plotObj(x, dir)
+}
+
+plot.multi_rd3 <- function(x, dir = tempDir(), ...){
+  if(length(x$options$mfrow)){
+    polyGraph(x$graphs, x$options$mfrow, dir)
+  }else{
+    multiGraph(x$graphs, dir)
+  }
+  browseURL(normalizePath(paste(dir, "index.html", sep = "/")))
+}
+
+objCreate <- function(x,dir){
+  if(inherits(x,"network_rd3")){
+    netCreate(x,dir)
+  }else if(inherits(x,"timeline_rd3")){
+    timeCreate(x,dir)
+  }else if(inherits(x,"barplot_rd3")){
+    barCreate(x,dir)
+  }else if(inherits(x,"gallery_rd3")){
+    galleryCreate(x,dir)
+  }else if(inherits(x,"pie_rd3")){
+    pieCreate(x,dir)
+  }else if(inherits(x,"evolMap")){
+    if(system.file(package='evolMap')!=""){
+      evolMap:::map_html(x,dir)
+    }else{
+      stop("'evolMap' package not installed")
+    }
+  }
+}
+
+plotObj <- function(x,dir){
+  objCreate(x,dir)
+  browseURL(normalizePath(paste(dir, "index.html", sep = "/")))
 }
 
 shiny_rd3 <- function(x) UseMethod("shiny_rd3", x)

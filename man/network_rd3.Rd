@@ -12,10 +12,10 @@ If the 'dir' attribute is specified, the function creates a folder in the comput
 \usage{
 network_rd3(nodes = NULL, links = NULL, tree = NULL,
         community = NULL, layout = NULL,
-        name = NULL, label = NULL, group = NULL, labelSize = NULL,
-        size = NULL, color = NULL, shape = NULL, legend = NULL,
-        sort = NULL, decreasing = FALSE, ntext = NULL, info = NULL,
-        image = NULL, imageNames = NULL,
+        name = NULL, label = NULL, group = NULL, groupText = FALSE,
+        labelSize = NULL, size = NULL, color = NULL, shape = NULL,
+        border = NULL, legend = NULL, sort = NULL, decreasing = FALSE,
+        ntext = NULL, info = NULL, image = NULL, imageNames = NULL,
         nodeBipolar = FALSE, nodeFilter = NULL, degreeFilter = NULL,
         source = NULL, target = NULL,
         lwidth = NULL, lweight = NULL, lcolor = NULL, ltext = NULL,
@@ -25,19 +25,20 @@ network_rd3(nodes = NULL, links = NULL, tree = NULL,
         main = NULL, note = NULL, showCoordinates = FALSE, showArrows = FALSE,
         showLegend = TRUE, frequencies = FALSE, showAxes = FALSE,
         axesLabels = NULL, scenarios = NULL, help = NULL, helpOn = FALSE,
-        mode = c("network","heatmap"), controls = 1:4, cex = 1,
-        background = NULL, defaultColor = "#1f77b4",
+        mode = c("network","heatmap"), roundedItems = FALSE, controls = 1:4,
+        cex = 1, background = NULL, defaultColor = "#1f77b4",
         language = c("en","es","ca"), dir = NULL)
 }
 \arguments{
 \item{nodes}{a data frame with at least one column of node names.}
 \item{links}{a data frame with at least two columns with source and target node names.}
 \item{tree}{a data frame with two columns: source and target, describing relationships between nodes. It indicates a hierarchy between nodes which can be dynamically explored.}
-\item{name}{name of the column with names in the nodes data frame. By default, if language="en", name is "name".}
+\item{name}{name of the column with names in the nodes data frame.}
 \item{source}{name of the column with source names in the links data frame.}
 \item{target}{name of the column with target names in the links data frame.}
 \item{label}{name of the column with labels in the nodes data frame.}
 \item{group}{name of the column with groups in the nodes data frame.}
+\item{groupText}{show names of the groups.}
 \item{community}{algorithm to make communities: edge_betweenness("ed"), fast_greedy("fa"), label_prop("la"), leiden_eigen("le"), louvain("lo"), optimal("op"), spinglass("sp"), walktrap("wa")}
 \item{labelSize}{name of the column with label size in the nodes data frame.}
 \item{size}{name of the column with size in the nodes data frame.}
@@ -46,6 +47,7 @@ network_rd3(nodes = NULL, links = NULL, tree = NULL,
 \item{legend}{name of the column with the variable to represent as a legend in the nodes data frame.}
 \item{ntext}{name of the column with html text in the nodes data frame.}
 \item{info}{name of the column with information to display in a panel in the nodes data frame.}
+\item{border}{name of the column with border width in the nodes data frame.}
 \item{sort}{name of the column with node order in the nodes data frame (only for heatmap).}
 \item{decreasing}{decreasing or increasing sort of the nodes (only for heatmap).}
 \item{intensity}{name of the column with intensity variable in the links data frame (only for heatmap).}
@@ -74,6 +76,7 @@ network_rd3(nodes = NULL, links = NULL, tree = NULL,
 drl("da"), circle("ci"), Force-Atlas-2("fo"), fruchterman.reingold("fr"), gem("ge"), grid("gr"), kamada.kawai("ka"), lgl("lg"), mds("md"), random("ra"), reingold.tilford("re"), star("sta"), sugiyama("sug")}
 \item{limits}{vector indicating the layout limits, must be a numeric vector of length 4 on this order: x_min, y_min, x_max, y_max.}
 \item{cex}{number indicating the amount by which plotting text should be scaled relative to the default.}
+\item{roundedItems}{Display images with rounded borders.}
 \item{controls}{a numeric vector indicating which controls will be shown. 1 = sidebar, 2 = selection buttons, 3 = export buttons, 4 = nodes table, 5 = links table. NULL hide all controls, negative values deny each control and 0 deny all.}
 \item{mode}{a character vector indicating the graph mode allowed: network, heatmap or both (both by default).}
 \item{showCoordinates}{a logical value true if the coordinates are to be shown in tables and axes. Default = FALSE.}

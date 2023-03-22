@@ -14,20 +14,21 @@ function network(Graph){
       VisualHandlers = {},
       Controllers = {},
       frequencyBars = false,
+      linePlots = false,
       GraphNodesLength = 0,
       GraphLinksLength = 0,
       options = Graph.options;
 
   delete Graph.options;
 
-  var defaultColor = categoryColors[0], // nodes and areas default color
-      defaultLinkColor = "#999999", // links default color
+  var defaultLinkColor = "#999999", // links default color
       linkSelectedColor = "#BB0", // Color of selected links
       nodeSelectedColor = "#FF0", // Color of selected nodes
       defaultShape = "Circle", // node shape by default
       symbolTypes = ["Circle","Square","Diamond","Triangle","Cross","Star","Wye"], // list of available shapes
       nodeSizeRange = [0.5,4], // node size range
       nodeLabelSizeRange = [8,20], // node label size range
+      nodeBorderRange = [1,3], // node border range
       linkWeightRange = [200,40], // link weight range (link distance)
       linkWidthRange = [1,5], // link width range
       zoomRange = [0.1, 10], // zoom range
@@ -38,7 +39,8 @@ function network(Graph){
       sidebarWidth = 240, // sidebar width (will increase with cex)
       nodeRadius = 4.514, // base node radius
       findNodeRadius = 20, // radius in which to find a node in the canvas
-      hiddenFields = ["x","y","source","target","fx","fy","hidden","childNodes","parentNode","_frame_"]; // not to show in sidebar controllers or tables
+      legendKeys = ["legend","color","shape","image","lcolor"],
+      hiddenFields = d3.set(["x","y","source","target","fx","fy","hidden","childNodes","parentNode","_frame_"]); // not to show in sidebar controllers or tables
 
   var simulation = d3.forceSimulation()
       .force("link", d3.forceLink())
@@ -72,7 +74,7 @@ function network(Graph){
   body.call(infoPanel);
   infoPanel.selection()
     .style("position","absolute")
-    .style("height", (computeHeight() - 20) + "px")
+    .style("height", (computeHeight() - 45) + "px")
 
   // main bar
   var main = body.append("div")
@@ -189,16 +191,6 @@ function network(Graph){
     var key = getKey(d3.event);
     if(d3.event.ctrlKey || d3.event.metaKey){
       switch(key){
-        case "Enter":
-          if(frameControls.play){
-            frameControls.play = false;
-            clearInterval(frameControls.frameInterval);
-          }else{
-            frameControls.play = true;
-            handleFrames(frameControls.frame+1);
-          }
-          clickFrameCtrlBtn();
-          return;
         case "0":
           plot.select(".zoombutton.zoomreset").dispatch("click");
           return;
@@ -296,7 +288,7 @@ function network(Graph){
         case "n": // warning: new window
           return;
         case "o":
-          if(selectedNodesLength()) selectNodesFromTable();
+          if(selectedNodesLength()) selectFromTable();
           return;
         case "p":
           treeAction();
@@ -343,6 +335,19 @@ function network(Graph){
     }else{
       if(key == "Enter"){
         if(selectedNodesLength()) switchEgoNet();
+        return;
+      }
+      if(key == " "){
+        if(frameControls){
+          if(frameControls.play){
+            frameControls.play = false;
+            clearInterval(frameControls.frameInterval);
+          }else{
+            frameControls.play = true;
+            handleFrames(frameControls.frame+1);
+          }
+          clickFrameCtrlBtn();
+        }
         return;
       }
     }
@@ -409,22 +414,19 @@ function network(Graph){
     if(options.frames){
       if(options.frames.length>1 && Graph.linknames && Graph.linknames.indexOf("_frame_")!=-1){
 
-        var speed = 50;
-        if(options.hasOwnProperty("speed"))
-          speed = options.speed;
-        speed = speed/100 * (timeRange[1]-timeRange[0]) + timeRange[0];
+        var speed = (+options.speed)/100 * (timeRange[1]-timeRange[0]) + timeRange[0];
 
         var frame = 0;
         if(options.frame && options.frame<options.frames.length)
           frame = options.frame;
 
         frameControls = {
-          "play": true,
+          "play": options.speed ? true : false,
           "frame": frame,
           "frames": options.frames,
           "frameInterval": null,
           "time": speed,
-          "loop": false
+          "loop": options.loop ? true : false
         };
       }
       ["zoom","repulsion","distance"].forEach(function(d){
@@ -447,7 +449,7 @@ function network(Graph){
       Graph.nodenames.forEach(function(d,j){
         node[d] = Graph.nodes[j][i];
         if(d.substr(0,1)=="_"){
-          hiddenFields.push(d);
+          hiddenFields.add(d);
         }
       })
       node.degree = 0;
@@ -509,19 +511,20 @@ function network(Graph){
 
     ["nodeText","nodeInfo"].forEach(function(d){
       if(options[d] && options[d]!=options.nodeName)
-        hiddenFields.push(options[d]);
+        hiddenFields.add(options[d]);
     });
 
-    if(options.defaultColor)
-      defaultColor = options.defaultColor;
+    options.highlightNeighbors = 1;
+
+    options.defaultColor = defaultColorManagement(options.defaultColor);
 
     options.colorScalenodeColor = "RdWhGn"; // default linear scale for nodes
-    options.colorScalelinkColor = "RdBkGn"; // default linear scale for links
-    options.colorScalenodeGroup = "RdBkGn"; // default linear scale for groups
+    options.colorScalelinkColor = "RdWhGn"; // default linear scale for links
+    options.colorScalenodeGroup = "RdWhGn"; // default linear scale for groups
     options.colorScalelinkIntensity = "WhBu"; // default linear scale for intensity
 
     if(options.nodeBipolar){
-      switch(defaultColor) {
+      switch(options.defaultColor) {
         case basicColors.black:
           options.colorScalenodeColor = "RdWhBk";
           break;
@@ -529,12 +532,14 @@ function network(Graph){
           options.colorScalenodeColor = "RdWhGn";
           break;
         default:
-          colorScales['custom1'] = [categoryColors[4],basicColors.white,defaultColor];
-          colorScales['custom2'] = [defaultColor,basicColors.white,categoryColors[4]];
+          if(!(colorScales.custom1 && colorScales.custom2)){
+            colorScales['custom1'] = [categoryColors[4],basicColors.white,options.defaultColor];
+            colorScales['custom2'] = [options.defaultColor,basicColors.white,categoryColors[4]];
+          }
           options.colorScalenodeColor = "custom1";
       }
     }else{
-      switch(defaultColor) {
+      switch(options.defaultColor) {
         case basicColors.black:
           options.colorScalenodeColor = "WhBk";
           break;
@@ -548,10 +553,16 @@ function network(Graph){
           options.colorScalenodeColor = "WhRd";
           break;
         default:
-          colorScales['custom1'] = [defaultColor,basicColors.white];
-          colorScales['custom2'] = [basicColors.white,defaultColor];
-          options.colorScalenodeColor = "custom2";
+          if(!(colorScales.custom1 && colorScales.custom2)){
+            colorScales['custom1'] = [basicColors.white,options.defaultColor];
+            colorScales['custom2'] = [options.defaultColor,basicColors.white];
+          }
+          options.colorScalenodeColor = "custom1";
       }
+    }
+
+    if(!options.linkBipolar){
+      options.colorScalelinkColor = "WhGn";
     }
 
     if(options.cex){
@@ -573,25 +584,36 @@ function network(Graph){
     if(options.imageNames){
       if(!Array.isArray(options.imageNames))
         options.imageNames = [options.imageNames];
-    }else
+    }else{
       options.imageNames = [];
+    }
     if(options.imageItems){
-      if(!Array.isArray(options.imageItems))
+      if(!Array.isArray(options.imageItems)){
         options.imageItems = [options.imageItems];
+      }
       options.nodeImage = options.imageNames[0];
       images = {};
       Graph.nodes.forEach(function(node){
         options.imageItems.forEach(function(col){
-          var img = new Image();
-          img.src = node[col];
-          images[node[col]] = img;
+          var uris = node[col];
+          if(typeof uris == "string"){
+            uris = [uris];
+          }
+          uris.forEach(function(uri){
+            images[uri] = new Image();
+            images[uri].src = uri;
+          });
         })
       })
-    }else
+    }else{
       options.imageItems = [];
+    }
 
     options.imageItems.forEach(function(d){
-      hiddenFields.push(d);
+      hiddenFields.add(d);
+    })
+    options.imageNames.forEach(function(d){
+      hiddenFields.add(d);
     })
 
     options.showSidebar = showControls(options,1);
@@ -629,7 +651,7 @@ function network(Graph){
 
     function splitMultiVariable(d){
       for(var p in d) {
-        if(p!=options.nodeName){
+        if(p!=options.nodeName && p!=options.nodeText && p!=options.nodeInfo){
           if(typeof d[p] == "string" && d[p].indexOf("|")!=-1){
             var aux = d[p].split("|");
             if(!frameControls || aux.length==frameControls.frames.length){
@@ -675,6 +697,11 @@ function network(Graph){
 
 function displayMain(){
   main.selectAll("*").remove();
+  if(options.multipages){
+    main.append("button").attr("class","primary home").text(texts.goback).attr("title",texts.goback).on("click",function(){
+      window.location.href = "../../index.html";
+    })
+  }
   if(typeof multiGraph != 'undefined'){
       multiGraph.graphSelect(main.append("span"));
   }
@@ -726,13 +753,11 @@ function displayMain(){
   if(options.frequencies){
       options.frequencies = false;
       frequencyBars = displayFreqBars()
-        .nodenames(Graph.nodenames.filter(function(d){ return hiddenFields.indexOf(d)==-1; }).filter(function(d){ return d!=options.nodeName; }))
+        .nodenames(Graph.nodenames.filter(function(d){ return !hiddenFields.has(d); }).filter(function(d){ return d!=options.nodeName; }))
         .updateSelection(showTables)
         .applyColor(function(name){ applyAuto("nodeColor",name); })
         .applyShape(function(name){ applyAuto("nodeShape",name); })
-      infoPanel.selection().select(".infopanel > .close-button").on("click.hidefreq",function(){
-        options.frequencies = false;
-      });
+      infoPanel.closeAction(function(){ options.frequencies = false; });
       main.call(iconButton()
         .alt("freq")
         .width(24)
@@ -741,6 +766,29 @@ function displayMain(){
         .title("frequencies")
         .job(function(){
           options.frequencies = true;
+          showTables();
+        }));
+  }
+  if(frameControls && options.lineplotsKeys){
+      options.lineplots = false;
+      options.lineplotsItems = "nodes";
+      linePlots = displayLinePlots()
+        .frames(frameControls.frames)
+        .variables(options.lineplotsKeys)
+      infoPanel.closeAction(function(){ options.lineplots = false; });
+      main.call(iconButton()
+        .alt("lineplots")
+        .width(24)
+        .height(24)
+        .src(b64Icons.lineplots)
+        .title("lineplots")
+        .job(function(){
+          if(frameControls.play){
+            frameControls.play = false;
+            clearInterval(frameControls.frameInterval);
+          }
+          clickFrameCtrlBtn();
+          options.lineplots = true;
           showTables();
         }));
   }
@@ -804,6 +852,7 @@ function displayBottomPanel(){
         if(value > 200){
           height = value-dragOffset;
           plot.style("height",height+"px");
+          tables.style("height",computeTablesHeight() + "px")
         }
       })
       .on("end", function() {
@@ -815,6 +864,7 @@ function displayBottomPanel(){
     // tables
     var tables = body.append("div")
       .attr("class", "tables")
+      .style("height",computeTablesHeight() + "px")
 
     var items = [];
     if(typeof options.showNodes != "undefined"){
@@ -824,7 +874,6 @@ function displayBottomPanel(){
       items.push("links")
     }
 
-    tables.style("min-height","150px");
     panel.append("div")
       .attr("class","switchNodeLink")
       .selectAll("div")
@@ -856,30 +905,56 @@ function displayBottomPanel(){
     var tableHeader = tables.append("div")
       .attr("class","table-header")
 
+    if(items.length==2){
+      tableHeader.append("div")
+        .attr("class","switch-maximize-node-link")
+        .text(texts.goto + " " + (options.showLinks ? texts.nodes : texts.links))
+        .on("click",function(){
+              if(options.showLinks){
+                options.showNodes = true;
+                options.showLinks = false;
+              }else{
+                options.showLinks = true;
+                options.showNodes = false;
+              }
+              displayBottomPanel();
+        })
+    }
+
     tableHeader.append("div")
-      .attr("class","table-title " + (options.showNodes ? "nodes" : "links"));
+      .attr("class","size-button")
+      .on("click",function(){
+        body.classed("maximize-table",!body.classed("maximize-table"));
+        tables.style("height",computeTablesHeight()+"px");
+        showTables();
+      })
+
+    tableHeader = tableHeader.append("div")
+      .attr("class","inline-elements")
+
+    tableHeader.append("div")
+      .attr("class","table-title");
+
     tableHeader.call(iconButton()
         .alt("xlsx")
-        .width(14)
-        .height(14)
+        .float("none")
         .src(b64Icons.xlsx)
         .title(texts.downloadtable)
         .job(tables2xlsx))
       .select("img")
-        .style("float","none")
         .style("margin-right","24px")
         .style("margin-bottom","-2px")
 
     tableHeader.append("input")
       .attr("type", "text")
-      .attr("placeholder",texts.searchanode)
+      .attr("placeholder",texts.searchintable)
       .on("keyup",function(){
         var txt = d3.select(this).property("value");
         if(txt.length>1){
           txt = new RegExp(txt,'i');
           Graph.nodes.forEach(function(node){
-            node.selected = false;
-            if(checkSelectable(node)){
+            delete node.selected;
+            if(checkSelectableNode(node)){
               var i = 0;
               while(!node.selected && i<Graph.nodenames.length){
                 if(String(node[Graph.nodenames[i++]]).match(txt))
@@ -887,13 +962,14 @@ function displayBottomPanel(){
               }
             }
           });
+          autoSelectLinks();
           showTables();
         }
       })
 
-    displayButton(tableHeader,"tableselection",selectNodesFromTable,"ctrl + o",false,"primary");
+    displayButton(tableHeader,"tableselection",selectFromTable,"ctrl + o",false,"primary");
 
-    tables.append("div").attr("class",options.showNodes ? "nodes" : "links");
+    tables.append("div").attr("class","table-container");
     showTables();
   }
 
@@ -923,11 +999,10 @@ function displaySidebar(){
     sidebar.append("div")
       .attr("class","subSearch")
       .call(displayMultiSearch()
-        .data(Graph.nodes)
+        .data(Graph.nodes.filter(checkSelectableNode))
         .column(options.nodeLabel ? options.nodeLabel : options.nodeName)
-        .update(showTables)
-        .update2(switchEgoNet)
-        .filterData(checkSelectable));
+        .updateSelection(showTables)
+        .updateFilter(switchEgoNet));
 
   }else{
     sidebar.selectAll("div.sidebar>div:not(.subSearch)").remove();
@@ -999,7 +1074,7 @@ function displaySidebar(){
     if(options.heatmap){
       visData = ["Label","Color","Shape","Legend","Order"];
     }else{
-      visData = ["Label","Size","LabelSize","Color","Shape","Image","Legend","Group"];
+      visData = ["Label","Size","LabelSize","Color","Shape","Image","Legend","Group","Border"];
     }
     divControl = sideNodes.append("div")
       .attr("class", "nodeAuto")
@@ -1307,13 +1382,17 @@ function displaySidebar(){
         handleFrames(val);
         clickFrameCtrlBtn();
       })
-      frameButons.append("button") // loop
+      var loopButton = frameButons.append("button") // loop
       .call(getSVG().d(d4paths.loop))
       .on("click",function(){
         frameControls.loop = !frameControls.loop;
-        d3.select(this).style("background-color",frameControls.loop?basicColors.darkGrey:null)
-          .selectAll("path").style("fill",frameControls.loop?basicColors.lightGrey:null);
+        loopButtonStyle(loopButton);
       })
+      var loopButtonStyle = function(button){
+        button.style("background-color",frameControls.loop?basicColors.darkGrey:null)
+          .selectAll("path").style("fill",frameControls.loop?basicColors.lightGrey:null);
+      }
+      loopButtonStyle(loopButton);
       var stopRecord = function(){
           frameControls.recorder.stop();
           frameControls.recorder.save(Math.round((new Date()).getTime() / 1000)+'record.webm');
@@ -1387,7 +1466,7 @@ function addVisualController(){
       item,
       data,
       visData,
-      onlyNumeric = ["Size","LabelSize","Width","Weight"];
+      onlyNumeric = ["Size","Border","LabelSize","Width","Weight"];
 
   function exports(sel){
     var sels = sel.selectAll("visSel")
@@ -1407,7 +1486,7 @@ function addVisualController(){
 
     sels.each(function(visual){
       var attributes = Graph[item+"names"].filter(function(d){
-          if(hiddenFields.indexOf(d)==-1 && (items!="links" || (options.linkSource!=d && options.linkTarget!=d))){
+          if(!hiddenFields.has(d) && (items!="links" || (options.linkSource!=d && options.linkTarget!=d))){
             var t = dataType(data,d,true);
             if(!((onlyNumeric.indexOf(visual)!=-1 && t!="number") || (visual=="Image" && options.imageNames.indexOf(d)==-1))){
               return true;
@@ -1520,7 +1599,7 @@ function addFilterController(){
       .attr("class","attrSel");
 
     var attributes = Graph[item+"names"].filter(function(d){
-      return hiddenFields.indexOf(d)==-1 && (items!="links" || (options.linkSource!=d && options.linkTarget!=d));
+      return !hiddenFields.has(d) && (items!="links" || (options.linkSource!=d && options.linkTarget!=d));
     });
 
     attrSelect.selectAll("option")
@@ -1593,7 +1672,7 @@ function addFilterController(){
       valueSelector.selectAll("*").remove();
       slider = false;
       selectMultiple = false;
-      var tmpData = items=="nodes" ? Graph.nodes.filter(checkSelectable) : Graph.links.filter(checkSelectableLink);
+      var tmpData = items=="nodes" ? Graph.nodes.filter(checkSelectableNode) : Graph.links.filter(checkSelectableLink);
       var type = dataType(tmpData,val);
       if(type == 'number'){
         var extent = d3.extent(tmpData, function(d){ return d[val]; }),
@@ -1605,7 +1684,7 @@ function addFilterController(){
             if(items=="nodes"){
               Graph.nodes.forEach(function(d){
                 delete d.selected;
-                if(checkSelectable(d) && (d[val]>=s[0] && d[val]<=s[1])){
+                if(checkSelectableNode(d) && (d[val]>=s[0] && d[val]<=s[1])){
                   d.selected = true;
                 }
               });
@@ -1637,30 +1716,34 @@ function addFilterController(){
                 values.push(this.value);
               })
             if(items=="nodes"){
-              Graph.nodes.forEach(function(d){
-                delete d.selected;
-                if(checkSelectable(d)){
-                  if(typeof d[val] == "object"){
-                    if(intersection(values,d[val]).length){
-                      d.selected = true;
-                    }
-                  }else{
-                    if(values.indexOf(String(d[val]))!=-1){
-                      d.selected = true;
-                    }
-                  }
-                }
-              });
+              manageSelection(Graph.nodes,checkSelectableNode);
             }
             if(items=="links"){
-              Graph.links.forEach(function(d){
+              manageSelection(Graph.links,checkSelectableLink);
+            }
+            showTables();
+
+            function manageSelection(items,checkSelectable){
+              items.forEach(function(d){
                 delete d.selected;
-                if(checkSelectableLink(d) && values.indexOf(String(d[val]))!=-1){
+                if(checkSelectable(d) && isSelected(values,d[val])){
                   d.selected = true;
                 }
               });
+
+              function isSelected(values,dval){
+                if(typeof dval == "object"){
+                  if(intersection(values,dval).length){
+                    return true;
+                  }
+                }else{
+                  if(values.indexOf(String(dval))!=-1){
+                    return true;
+                  }
+                }
+                return false;
+              }
             }
-            showTables();
           })
         selectMultiple.selectAll("option")
         .data(d3.set(dat).values().sort(sortAsc))
@@ -1697,14 +1780,18 @@ function addFilterController(){
 
   exports.update = function(onlyslider){
     // cancel if event came fom this select multiple
-    if(d3.event && d3.event.target && d3.event.target.parentNode && d3.select(d3.event.target.parentNode).classed("value-selector")){
-      return;
-    }
+    try{
+      if(d3.select(d3.event.target.parentNode).classed("value-selector")){
+        return;
+      }
+    }catch(error){}
 
     // cancel if event came fom this brush slider
-    if(d3.event && d3.event.sourceEvent && d3.event.sourceEvent.target && d3.event.sourceEvent.target.parentNode && d3.select(d3.event.sourceEvent.target.parentNode.parentNode.parentNode).classed("value-selector")){
-      return;
-    }
+    try{
+      if(d3.select(d3.event.sourceEvent.target.parentNode.parentNode.parentNode).classed("value-selector")){
+        return;
+      }
+    }catch(error){}
 
     if(onlyslider ^ !slider){
       attrSelect.dispatch("change");
@@ -1892,7 +1979,7 @@ function drawSVG(){
             extent[1][0] = transform.invertX(extent[1][0]);
             extent[1][1] = transform.invertY(extent[1][1]);
             Graph.nodes.forEach(function(node) {
-              node.selected = checkSelectable(node) && (node.selected ^ (extent[0][0] <= node.x && node.x < extent[1][0] && extent[0][1] <= node.y && node.y < extent[1][1]));
+              node.selected = checkSelectableNode(node) && (node.selected ^ (extent[0][0] <= node.x && node.x < extent[1][0] && extent[0][1] <= node.y && node.y < extent[1][1]));
             });
             autoSelectLinks();
           }
@@ -1958,8 +2045,13 @@ function drawSVG(){
       .prop('time')
       .callback(function(value){
         frameControls.time = value;
-        if(frameControls.play)
+        frameControls.play = value!=timeRange[0] ? true : false;
+        if(frameControls.play){
           handleFrames(frameControls.frame);
+          clickFrameCtrlBtn();
+        }else{
+          pauseFrames();
+        }
       });
   }
 
@@ -2045,6 +2137,7 @@ function drawSVG(){
         domain2 = false,
         scale2 = false,
         text = "",
+        header,
         prop = "",
         callback = null,
         rounded = false,
@@ -2073,7 +2166,7 @@ function drawSVG(){
 
       var x = 5, y = 10 + 10*options.cex;
 
-      sliders.append("text")
+      header = sliders.append("text")
         .attr("x", x)
         .attr("y", y - 10)
         .text(text);
@@ -2136,6 +2229,9 @@ function drawSVG(){
       var renderedValue = scale2.invert(brValue);
       renderedValue = rounded ? Math.round(renderedValue) : formatter(renderedValue);
       bubble.select("text").text(renderedValue);
+      if(header){
+        header.text(text+": "+renderedValue);
+      }
       var bubbleWidth = bubble.select("text").node().getBoundingClientRect().width+6;
       bubble.select("rect").attr("width",bubbleWidth);
       var tomove = brValue;
@@ -2276,6 +2372,10 @@ function pauseFrames(){
 function frameStep(value){
         frameControls.frame = value;
 
+        var sliderFramesText = d3.select(".slider.frames > g > text");
+        if(!sliderFramesText.empty()){
+          sliderFramesText.text("Frame: "+(frameControls.frame+1)+"/"+frameControls.frames.length)
+        }
         var selectFrame = d3.select(".divFrameCtrl .selectFrame");
         if(!selectFrame.empty())
           selectFrame.node().selectedIndex = frameControls.frame;
@@ -2350,14 +2450,14 @@ function drawNet(){
       });
     }
     Graph.nodes.forEach(function(d){
-      if(checkSelectable(d) && d.childNodes.length)
+      if(checkSelectableNode(d) && d.childNodes.length)
         hideChildren(d);
     });
   }
 
   var nodes = Graph.nodes.filter(function(node){
     node.degree = 0;
-    return checkSelectable(node);
+    return checkSelectableNode(node);
   });
 
   var links = Graph.links.filter(checkSelectableLink);
@@ -2386,9 +2486,10 @@ function drawNet(){
   // compute colors
   if(!VisualHandlers.hasOwnProperty("nodeColor")){
     VisualHandlers.nodeColor = setColorScale()
-        .data(GraphLinksLength && options.nodeColor=="degree" ? nodes : Graph.nodes)
+        .data(GraphLinksLength && options.nodeColor=="degree" ? nodes : (backupNodes ? backupNodes : Graph.nodes))
         .item('node')
-        .itemAttr("nodeColor")
+        .attr("Color")
+        .key(options.nodeColor)
         .computeScale()
   }
 
@@ -2397,7 +2498,8 @@ function drawNet(){
       VisualHandlers.linkIntensity = setColorScale()
         .data(Graph.links)
         .item('link')
-        .itemAttr("linkIntensity")
+        .attr("Intensity")
+        .key(options.linkIntensity)
         .computeScale()
     }
   }else{
@@ -2405,7 +2507,8 @@ function drawNet(){
       VisualHandlers.nodeGroup = setColorScale()
         .data(GraphLinksLength && options.nodeGroup=="degree" ? nodes : Graph.nodes)
         .item('node')
-        .itemAttr("nodeGroup")
+        .attr("Group")
+        .key(options.nodeGroup)
         .computeScale()
     }
 
@@ -2413,7 +2516,8 @@ function drawNet(){
       VisualHandlers.linkColor = setColorScale()
         .data(Graph.links)
         .item('link')
-        .itemAttr("linkColor")
+        .attr("Color")
+        .key(options.linkColor)
         .computeScale()
     }
   }
@@ -2426,10 +2530,12 @@ function drawNet(){
     // compute node size
     var defaultNodeSize = options.defaultNodeSize ? options.defaultNodeSize : (options.imageItem?3:1);
     var getNodeSize = getNumAttr(nodes,'nodeSize',nodeSizeRange,defaultNodeSize),
-        getNodeLabelSize = getNumAttr(nodes,'nodeLabelSize',nodeLabelSizeRange,10*options.cex);
+        getNodeLabelSize = getNumAttr(nodes,'nodeLabelSize',nodeLabelSizeRange,10*options.cex),
+        getNodeBorder = getNumAttr(nodes,'nodeBorder',nodeBorderRange,1);
     nodes.forEach(function(node){
       node.nodeSize = getNodeSize(node) * nodeRadius;
       node.nodeLabelSize = getNodeLabelSize(node);
+      node.nodeBorder = getNodeBorder(node);
     });
   }
 
@@ -2438,7 +2544,8 @@ function drawNet(){
     VisualHandlers.nodeShape = setShapeScale()
         .data(Graph.nodes)
         .item('node')
-        .itemAttr("nodeShape")
+        .attr("Shape")
+        .key(options.nodeShape)
         .computeScale()
   }
 
@@ -2654,7 +2761,7 @@ function drawNet(){
         .style("font-size", x.bandwidth()*2/5 + "px")
         .on("mouseover", mouseover)
         .text(function(d){
-            if(!isNaN(+d.txt))
+            if(d.txt && !isNaN(+d.txt))
               return d.txt.toFixed(1);
             return d.txt;
         })
@@ -2687,7 +2794,7 @@ function drawNet(){
     d3.event.stopPropagation();
     links.forEach(function(l){ checkNeighbors(l,p); });
     nodes.forEach(function(n){
-      n.selected = (checkSelectable(n) && (n.index == p.x || n.index == p.y))? true : false;
+      n.selected = (checkSelectableNode(n) && (n.index == p.x || n.index == p.y))? true : false;
       delete n.__neighbor;
     });
     switchEgoNet();
@@ -2754,13 +2861,15 @@ function drawNet(){
       VisualHandlers.linkIntensity.displayScale();
     }else{
       VisualHandlers.nodeColor.displayScale();
+      VisualHandlers.linkColor.displayScale();
     }
 
     // display legends
     var legendLegend = options.nodeLegend ? true : false,
         legendColor = options.nodeColor && dataType(nodes,options.nodeColor)!='number',
         legendShape = options.nodeShape ? true : false,
-        legendImage = (!options.heatmap && options.imageItem) && (options.imageItems && options.imageNames);
+        legendImage = (!options.heatmap && options.imageItem) && (options.imageItems && options.imageNames),
+        legendLcolor = options.linkColor && dataType(links,options.linkColor)!='number';
 
     Legends = {};
     var data;
@@ -2798,7 +2907,17 @@ function drawNet(){
 
     if(legendImage){
       var title = options.imageNames[options.imageItems.indexOf(options.imageItem)];
-      data = nodes.map(function(d){ return [d[title],d[options.imageItem]]; })
+      data = nodes.map(function(d){
+        var a = d[title];
+        var b = d[options.imageItem];
+        if(typeof a != "string"){
+          a = a[0];
+        }
+        if(typeof b != "string"){
+          b = b[0];
+        }
+        return [a,b];
+      })
       data.sort(function(a,b){
           return sortAsc(a[0],b[0]);
       })
@@ -2816,6 +2935,18 @@ function drawNet(){
         .title(title)
         .text(textFunc)
         .color("image")
+    }
+
+    if(legendLcolor){
+      data = getColumnValues(links,options.linkColor);
+      Legends.lcolor = displayLegend()
+        .item("link")
+        .type("Color")
+        .key(options.linkColor)
+        .data(data.sort(sortAsc))
+        .title(options.linkColor)
+        .text(stripTags)
+        .color(VisualHandlers.linkColor.getScale());
     }
 
     if(d3.keys(Legends).length){
@@ -2857,7 +2988,7 @@ function drawNet(){
       var div = divLegends.append("div")
         .attr("class","legends-content");
 
-      ["legend","color","shape","image"].forEach(function(k){
+      legendKeys.forEach(function(k){
         if(Legends.hasOwnProperty(k)){
           div.call(Legends[k]);
         }
@@ -2874,7 +3005,14 @@ function drawNet(){
         .attr("class","legend-selectall")
       displaycheck(gSelectAll,function(self){
         Graph.nodes.forEach(function(d){
-            if(self.selected && checkSelectable(d)){
+            if(self.selected && checkSelectableNode(d)){
+              d.selected = true;
+            }else{
+              delete d.selected;
+            }
+        });
+        Graph.links.forEach(function(d){
+            if(self.selected && checkSelectableLink(d)){
               d.selected = true;
             }else{
               delete d.selected;
@@ -2884,8 +3022,23 @@ function drawNet(){
       gSelectAll.append("span")
         .text(texts.selectall)
 
-      displayBottomButton(legendBottomControls,"filter",texts.filterInfo+" (ctrl + e)",switchEgoNet);
-      displayBottomButton(legendBottomControls,"isolate",texts.isolateInfo+" (ctrl + f)",filterSelection);
+      var gHighNeigh = legendBottomControls.append("div")
+        .attr("class","highlight-neighbors")
+      gHighNeigh.append("div")
+        .attr("class","legend-check-box")
+        .classed("checked",options.highlightNeighbors)
+      gHighNeigh.style("cursor","pointer")
+        .on("click",function(){
+          options.highlightNeighbors = !options.highlightNeighbors;
+          gHighNeigh.select(".legend-check-box")
+            .classed("checked",options.highlightNeighbors)
+          showTables();
+        })
+      gHighNeigh.append("span")
+        .text(texts["highlightneighbors"])
+
+      displayBottomButton(legendBottomControls,"filter",texts.filterInfo+" (ctrl + e)",switchEgoNet,filterLinkSelection);
+      displayBottomButton(legendBottomControls,"isolate",texts.isolateInfo+" (ctrl + f)",filterSelection,isolateLinkSelection);
     }
     // end legends
 
@@ -2914,9 +3067,11 @@ function drawNet(){
     // draw areas
     ctx.lineJoin = "round";
     if(options.nodeGroup){
-      ctx.globalAlpha = 0.2;
       ctx.lineWidth = 3;
+      ctx.font = 20*options.cex+"px "+fontFamily;
+      ctx.textAlign = "center";
       groups.forEach(function(group){
+        ctx.globalAlpha = 0.2;
         ctx.strokeStyle = VisualHandlers.nodeGroup(group);
         ctx.fillStyle = d3.rgb(ctx.strokeStyle).brighter(0.6);
         var points = getArea(group,nodes);
@@ -2925,6 +3080,14 @@ function drawNet(){
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
+
+        if(options.groupText){
+          ctx.globalAlpha = 1;
+          ctx.strokeStyle = "#777777";
+          ctx.fillStyle = "#ffffff";
+          ctx.strokeText(group[options.nodeGroup],points[0]+points[2]/2,points[1]+points[3]/2);
+          ctx.fillText(group[options.nodeGroup],points[0]+points[2]/2,points[1]+points[3]/2);
+        }
       })
     }
 
@@ -2978,17 +3141,29 @@ function drawNet(){
     nodes.forEach(function(node) {
       var nodeSize = checkNodeBigger(node);
       ctx.globalAlpha = node._back? 0.2 : 1;
-      ctx.lineWidth = node.selected || node._selected ? 2 : 1;
+      ctx.lineWidth = (node.selected || node._selected ? 2 : 1) * node.nodeBorder;
       var strokeStyle = node._selected ? "#F00" : (node.selected ? nodeSelectedColor : false);
       ctx.strokeStyle = strokeStyle;
       ctx.translate(node.x, node.y);
       if(options.imageItem){
-        var img = images[node[options.imageItem]],
-            imgHeight = img.height*2/img.width;
-        if(options.nodeShape){
-          var renderShape = function(){
-            d3.symbol().type(VisualHandlers.nodeShape(node)).size(nodeSize * nodeSize * Math.PI / 2.4).context(ctx)();
+        var uri = node[options.imageItem];
+        if(typeof uri != "string"){
+          uri = uri[0];
+        }
+        var img = images[uri],
+            imgHeight = img.height*2/img.width,
+            renderShape;
+        if(options.roundedItems || options.nodeShape){
+          if(options.nodeShape){
+            renderShape = function(){
+              d3.symbol().type(VisualHandlers.nodeShape(node)).size(nodeSize * nodeSize * Math.PI / 2.4).context(ctx)();
+            }          
+          }else{
+            renderShape = function(){
+              d3.symbol().type(d3["symbolCircle"]).size(nodeSize * nodeSize * Math.PI / 2.4).context(ctx)();
+            }
           }
+
           ctx.save();
           renderShape();
           ctx.clip();
@@ -2996,7 +3171,7 @@ function drawNet(){
         try{
           ctx.drawImage(img, -nodeSize, -(imgHeight/2)*nodeSize, nodeSize * 2, nodeSize * imgHeight);
         }catch(e){}
-        if(options.nodeShape){
+        if(renderShape){
           ctx.restore();
         }
         if(!strokeStyle && (options.nodeColor || options.nodeShape)){
@@ -3006,11 +3181,11 @@ function drawNet(){
             strokeStyle = basicColors.darkGrey;
           }
           ctx.strokeStyle = strokeStyle;
-          ctx.lineWidth = 2;
+          ctx.lineWidth = ctx.lineWidth * 2;
         }
         if(strokeStyle){
           ctx.beginPath();
-          if(options.nodeShape){
+          if(renderShape){
             renderShape();
           }else{
             ctx.arc(0, 0, nodeSize, 0, 2 * Math.PI);
@@ -3105,7 +3280,7 @@ function drawNet(){
       });
 
       doc.setTextColor(64);
-      d3.selectAll("g.heatmap .row text").each(function(){
+      d3.selectAll("g.heatmap > .row > text.label").each(function(){
         var self = d3.select(this),
             y = (getTranslation(d3.select(this.parentNode).attr("transform"))[1]*scale) + translate[1],
             txt = self.text(),
@@ -3114,7 +3289,7 @@ function drawNet(){
         doc.setFontSize(fontSize);
         doc.text(x-6, y+fontSize, txt, { align: "right" });
       });
-      d3.selectAll("g.heatmap .column text").each(function(){
+      d3.selectAll("g.heatmap > .column > text.label").each(function(){
         var self = d3.select(this),
             x = (getTranslation(d3.select(this.parentNode).attr("transform"))[0]*scale) + translate[0],
             txt = self.text(),
@@ -3122,6 +3297,17 @@ function drawNet(){
             fontSize = parseInt(self.style("font-size"))*scale;
         doc.setFontSize(fontSize);
         doc.text(x+fontSize, y-6, txt, null, 90);
+      });
+      d3.selectAll("g.heatmap > .row > text.cellText").each(function(){
+        var self = d3.select(this),
+            y = (getTranslation(d3.select(this.parentNode).attr("transform"))[1]*scale) + translate[1],
+            txt = self.text(),
+            x = translate[0] + parseInt(self.attr("x"))*scale,
+            fontSize = parseInt(self.style("font-size"))*scale,
+            color = self.style("fill");
+        doc.setFontSize(fontSize);
+        doc.setTextColor(color);
+        doc.text(x, y+fontSize+(dim/4), txt, { align: "center" });
       });
 
     }else{ // network display
@@ -3215,6 +3401,9 @@ function drawNet(){
         doc.setFillColor(color.r,color.g,color.b);
         if(options.imageItem){
           var imgSrc = node[options.imageItem];
+          if(typeof imgSrc != "string"){
+            imgSrc = imgSrc[0];
+          }
           if(images64[imgSrc]){
             var imgHeight = images[imgSrc].height*2/images[imgSrc].width;
             doc.addImage(images64[imgSrc], 'PNG', x-size, y-(imgHeight/2)*size, 2*size, imgHeight*size);
@@ -3259,11 +3448,11 @@ function drawNet(){
     if(!legendPanel.empty()){
       // scale
       if(!legendPanel.select(".scale").empty()) {
-          var svrRect = legendPanel.select(".scale svg > rect");
-          var colors = colorScales[svrRect.attr("fill").replace(/(url\()|(\))/g, "").replace("#","")];
+          var gradient = legendPanel.select(".legend-scale-gradient");
+          var colors = gradient.datum();
           var canvas = document.createElement("canvas");
-          canvas.width = parseInt(svrRect.attr("width"));
-          canvas.height = parseInt(svrRect.attr("height"));
+          canvas.width = parseInt(gradient.node().clientWidth);
+          canvas.height = parseInt(gradient.node().clientHeight);
           var ctx = canvas.getContext("2d");
           var grd = ctx.createLinearGradient(0,0,canvas.width,0);
           colors.forEach(function(c,i){
@@ -3288,7 +3477,7 @@ function drawNet(){
       if(!legendPanel.select(".legends").empty()) {
         var y = legendPanel.select(".scale").empty() ? 20 : 100;
         doc.setDrawColor(198, 198, 198);
-        ["legend","color","shape","image"].forEach(function(k){
+        legendKeys.forEach(function(k){
           if(Legends.hasOwnProperty(k)){
             var data = Legends[k].data(),
                 title = Legends[k].title(),
@@ -3334,7 +3523,7 @@ function drawNet(){
     doc.setLineWidth(scale);
     doc.setDrawColor(170, 170, 170);
     doc.setTextColor(170, 170, 170);
-    d3.selectAll(".net .axis").each(function(){
+    d3.selectAll(".plot > svg > .net > .axis").each(function(){
       var self = d3.select(this);
       if(self.style("opacity")=="1"){
         var x1 = (+self.attr("x1")*scale)+translate[0],
@@ -3345,7 +3534,7 @@ function drawNet(){
         doc.line(x1, y1, x2, y2);
       }
     })
-    d3.selectAll(".net .axisLabel").each(function(){
+    d3.selectAll(".plot > svg > .net > .axisLabel").each(function(){
       var self = d3.select(this);
       if(self.style("opacity")=="1"){
         var x = (+self.attr("x")*scale)+translate[0],
@@ -3356,6 +3545,33 @@ function drawNet(){
         doc.text(x, y, self.text(), { align: tAlign });
       }
     })
+    var axis = d3.select(".plot > svg > .axis");
+    if(!axis.empty() && axis.style("opacity")=="1"){
+        d3.selectAll(".plot > svg > .axis").each(function(){
+          var rect = this.getBoundingClientRect(),
+              offsetY = this.ownerSVGElement.getBoundingClientRect().y,
+              x1,y1,x2,y2;
+          if(d3.select(this).classed("x")){
+            x1 = rect.x,
+            y1 = rect.y-offsetY,
+            x2 = rect.x+rect.width,
+            y2 = y1;
+          }else{
+            x1 = rect.x+rect.width,
+            y1 = rect.y-offsetY,
+            x2 = x1,
+            y2 = rect.y+rect.height-offsetY;
+          }
+          doc.line(x1, y1, x2, y2);
+        });
+        d3.selectAll(".plot > svg > .axis > .tick > text").each(function(){
+          var rect = this.getBoundingClientRect(),
+              offsetY = this.ownerSVGElement.getBoundingClientRect().y,
+              x = rect.x,
+              y = rect.y+(rect.height/2)-offsetY;
+          doc.text(x, y, d3.select(this).text());
+        });
+    }
 
     doc.save(d3.select("head>title").text()+".pdf");
   } // end pdf function
@@ -3363,10 +3579,11 @@ function drawNet(){
 
 function showTooltip(node,fixed){
     if(options.nodeText && node[options.nodeText] && plot.select("div.tooltip").filter(function(d){ return node[options.nodeName]==d[options.nodeName]; }).empty()){
-        plot.append("div")
+        var tooltip = plot.append("div")
              .attr("class","tooltip"+(fixed?" fixed":""))
              .datum(node)
              .html(node[options.nodeText])
+        tooltip.select(".tooltip > .info-template > h2.auto-color").style("background-color",options.nodeColor ? VisualHandlers.nodeColor(node) : options.defaultColor);
     }
 }
 
@@ -3488,7 +3705,7 @@ function dragged_constructural(d) {
     if(node.type=="parent"){
       dx = node.fx-dx;
       dy = node.fy-dy;
-      Graph.nodes.filter(checkSelectable)
+      Graph.nodes.filter(checkSelectableNode)
         .filter(function(n){ return isDescendant(n,node); })
         .forEach(function(n){
           n.fx = n.fx + dx;
@@ -3679,12 +3896,13 @@ function updateAxes(){
       })
 }
 
-function setSomeSale(callback){
+function setSomeScale(callback){
   var config = {
     scale: false,
     data: [],
     item: "",
-    itemAttr: "",
+    attr: "",
+    key: null,
     exports: callback
   }
 
@@ -3704,9 +3922,15 @@ function setSomeSale(callback){
       return config.exports;
   };
 
-  config.exports.itemAttr = function(x) {
-      if (!arguments.length) return config.itemAttr;
-      config.itemAttr = x;
+  config.exports.attr = function(x) {
+      if (!arguments.length) return config.attr;
+      config.attr = x;
+      return config.exports;
+  };
+
+  config.exports.key = function(x) {
+      if (!arguments.length) return config.key;
+      config.key = x;
       return config.exports;
   };
 
@@ -3734,23 +3958,23 @@ function setSomeSale(callback){
 }
 
 function setShapeScale(){
-  var config = setSomeSale(function(obj){
+  var config = setSomeScale(function(obj){
     var shape = defaultShape;
     if(config.scale){
-      shape = config.scale(obj[options[config.itemAttr]]);
+      shape = config.scale(obj[config.key]);
     }
     return d3["symbol"+shape];
   });
 
   config.exports.computeScale = function(){
-    if(options[config.itemAttr]){
+    if(config.key){
       var domain, range;
-      if(Graph[config.item+"names"].indexOf("_"+config.itemAttr+"_"+options[config.itemAttr])!=-1){
-        var aux = uniqueRangeDomain(config.data, options[config.itemAttr], "_"+config.itemAttr+"_"+options[config.itemAttr]);
+      if(Graph[config.item+"names"].indexOf("_"+config.item+config.attr+"_"+config.key)!=-1){
+        var aux = uniqueRangeDomain(config.data, config.key, "_"+config.item+config.attr+"_"+config.key);
         domain = aux.domain;
         range = aux.range;
       }else{
-        domain = d3.map(config.data, function(d) { return d[options[config.itemAttr]]; }).keys();
+        domain = d3.map(config.data, function(d) { return d[config.key]; }).keys();
         range = [];
         domain.forEach(function(d,i){
           range[i] = symbolTypes[i%symbolTypes.length];
@@ -3767,41 +3991,61 @@ function setShapeScale(){
 }
 
 function setColorScale(){
-  var config = setSomeSale(function(obj){
+  var config = setSomeScale(function(obj){
     if(config.scale){
-      return (obj[options[config.itemAttr]] === null)? (config.item == "node"? basicColors.white : basicColors.black) : config.scale(obj[options[config.itemAttr]]);
+      if(obj[config.key] === null){
+        return config.item == "node"? basicColors.white : basicColors.black;
+      }else{
+        if(config.item == "link" && typeof obj[config.key] == "object"){
+          return basicColors.mediumGrey;
+        }else{
+          return config.scale(obj[config.key]);
+        }
+      }
     }else{
-      return config.item == "link" && !options.heatmap ? defaultLinkColor : defaultColor;
+      return config.item == "link" && !options.heatmap ? defaultLinkColor : options.defaultColor;
     }
   });
 
   config.datatype = "string";
 
   config.exports.computeScale = function(){
-    if(options[config.itemAttr]){
-      if(Graph[config.item+"names"].indexOf("_"+config.itemAttr+"_"+options[config.itemAttr])!=-1){
-        var aux = uniqueRangeDomain(config.data, options[config.itemAttr], "_"+config.itemAttr+"_"+options[config.itemAttr]);
+    if(config.key){
+      if(Graph[config.item+"names"].indexOf("_"+config.item+config.attr+"_"+config.key)!=-1){
+        var aux = uniqueRangeDomain(config.data, config.key, "_"+config.item+config.attr+"_"+config.key);
         config.scale = d3.scaleOrdinal()
           .range(aux.range)
           .domain(aux.domain);
       }else{
         var domain, range;
-        config.datatype = dataType(config.data,options[config.itemAttr]);
+        var data = config.data.map(function(d){ return d[config.key]; });
+        data = data.filter(function(d){ return d !== null; });
+        if(dataType(config.data,config.key) == "object"){
+            data = d3.merge(data.map(function(d){
+              if(typeof d != "object"){
+                return [d];
+              }
+              return d;
+            }));
+            data = data.filter(function(d){ return d !== null; });
+        }
+        config.datatype = dataType(config.data,config.key,true);
         if(config.datatype == "number"){
-          domain = d3.extent(config.data.filter(function(d){ return d !== null; }), function(d) { return d[options[config.itemAttr]]; });
+          domain = d3.extent(data);
           if(options[config.item+"Bipolar"]){
             var absmax = Math.max(Math.abs(domain[0]),Math.abs(domain[1]));
             domain = [-absmax,+absmax];
           }
-          range = colorScales[options["colorScale"+config.itemAttr]];
+          range = colorScales[options["colorScale"+config.item+config.attr]];
           if(range.length==3){
             domain = [domain[0],d3.mean(domain),domain[1]];
           }
           config.scale = d3.scaleLinear()
           .range(range)
-          .domain(domain);
+          .domain(domain)
+          .clamp(true);
         }else{
-          domain = d3.map(config.data.filter(function(d){ return d[options[config.itemAttr]] !== null; }), function(d){ return d[options[config.itemAttr]]; }).keys();
+          domain = d3.set(data).values();
           range = [];
           domain.forEach(function(d,i){
             range[i] = categoryColors[i%categoryColors.length];
@@ -3819,22 +4063,31 @@ function setColorScale(){
     if(config.scale && config.datatype == "number"){
       var selectionWindow = attrSelectionWindow()
             .visual("Color")
-            .active(options.nodeColor)
-            .list(Graph[config.item+"names"].filter(function(d){ return hiddenFields.indexOf(d)==-1; }))
+            .active(config.key)
+            .list(Graph[config.item+"names"].filter(function(d){ return !hiddenFields.has(d); }))
             .clickAction(function(val){
               applyAuto("nodeColor",val);
             });
-      displayLinearScale(legendPanel,
-        options[config.itemAttr],
+      var panel = legendPanel.append("div").attr("class","linear-scale "+config.item+"s");
+      displayLinearScale(panel,
+        config.key + (config.item=="link" ? " (links)" : ""),
         config.scale.range(),
         config.scale.domain(),
         function(){
-          displayPicker(options,config.itemAttr,function(){
-            delete VisualHandlers[config.itemAttr];
+          displayPicker(options,config.item+config.attr,function(){
+            delete VisualHandlers[config.item+config.attr];
             drawNet();
           });
         },
-        selectionWindow
+        selectionWindow,
+        false,
+        function(d){
+          if(config.scale.range().length==3){
+            d = [d[0],(d[0]+d[1])/2,d[1]];
+          }
+          config.scale.domain(d);
+          drawNet();
+        }
       );
     }
   }
@@ -3877,7 +4130,7 @@ function getNumAttr(data,itemAttr,range,def){
 
 function selectAllItems(){
   Graph.nodes.forEach(function(n){
-    if(checkSelectable(n)){
+    if(checkSelectableNode(n)){
       n.selected = true;
     }
   });
@@ -3911,6 +4164,15 @@ function filterLinkSelection(){
     drawNet();
 }
 
+function isolateLinkSelection(){
+    filterLinkSelection();
+    Graph.nodes.forEach(function(d){
+      if(!d.degree)
+        d._hidden = true;
+    });
+    drawNet();
+}
+
 function showHidden(){
   egoNet = false;
   Graph.nodes.forEach(function(d){
@@ -3930,7 +4192,7 @@ function addNeighbors(){
           d.source.__neighbor = d.target.__neighbor = true;
     });
     Graph.nodes.forEach(function(d){
-      d.selected = checkSelectable(d) && d.__neighbor;
+      d.selected = checkSelectableNode(d) && d.__neighbor;
       delete d.__neighbor;
     });
     autoSelectLinks();
@@ -3954,7 +4216,7 @@ function switchEgoNet(){
     drawNet();
 }
 
-function checkSelectable(node){
+function checkSelectableNode(node){
   var selectable = !node._hidden && !node._hideFrame;
   if(egoNet)
     selectable = selectable && node._neighbor;
@@ -3972,7 +4234,7 @@ function checkSelectableLink(link){
 function treeAction(){
   if(!selectedNodesLength()){
       Graph.nodes.forEach(function(d){
-        if(checkSelectable(d))
+        if(checkSelectableNode(d))
           d.selected = true;
       });
   }
@@ -4093,7 +4355,9 @@ function displayLegend(){
       text = String,
       color = basicColors.black,
       shape = defaultShape,
-      data = [];
+      data = [],
+      item = "node",
+      checkSelectable = checkSelectableNode;
 
   function exports(parent){
 
@@ -4101,20 +4365,20 @@ function displayLegend(){
       return 0;
 
     legend = parent.append("div")
-    .attr("class","legend")
+    .attr("class","legend "+item+"s")
     .property("key",key)
 
     var selectionWindow = attrSelectionWindow()
             .visual(type)
-            .active(options["node"+type])
-            .list(Graph.nodenames.filter(function(d){ return hiddenFields.indexOf(d)==-1; }))
+            .active(options[item+type])
+            .list(Graph[item+"names"].filter(function(d){ return !hiddenFields.has(d); }))
             .clickAction(function(val){
-              applyAuto("node"+type,val);
+              applyAuto(item+type,val);
             });
 
     legend.append("div")
         .attr("class","title")
-        .text(texts[type] + " / " + (typeof title == "undefined" ? key : title))
+        .text(texts[type] + " / " + (typeof title == "undefined" ? key : title) + (item=="link" ? " (links)" : ""))
         .style("cursor","pointer")
         .on("click",selectionWindow)
 
@@ -4129,7 +4393,7 @@ function displayLegend(){
     displaycheck(row,function(self){
       var compare = function(value){
         value = String(value);
-        Graph.nodes.forEach(function(d){
+        Graph[item+"s"].forEach(function(d){
           if((d3.event.ctrlKey || d3.event.metaKey) && !d3.event.shiftKey){
             delete d.selected;
           }
@@ -4141,7 +4405,9 @@ function displayLegend(){
             }
           }
         });
-        autoSelectLinks();
+        if(item=="node"){
+          autoSelectLinks();
+        }
       }
       if(d3.event.shiftKey && row.filter(function(d){ return this.selected; }).size()>1){
         var first = false,
@@ -4252,6 +4518,20 @@ function displayLegend(){
       return exports;
   };
 
+  exports.item = function(x) {
+      if (!arguments.length) return item;
+      if(item=="node" || item=="link"){
+        item = x;
+        if(item=="node"){
+          checkSelectable = checkSelectableNode;
+        }
+        if(item=="link"){
+          checkSelectable = checkSelectableLink;
+        }
+      }
+      return exports;
+  };
+
   return exports;
 }
 
@@ -4277,27 +4557,34 @@ function checkLegendKeyValue(d,key,value){
   return String(d[key])==value || (d[key] && (typeof d[key] == "object" && (d[key].indexOf(value)!=-1 || d[key].join(",")==value)));
 }
 
-function displayBottomButton(sel,text,tooltip,callback){
+function displayBottomButton(sel,text,tooltip,nodesCallback,linksCallback){
       sel.append("button")
         .attr("class","legend-bottom-button primary disabled")
         .text(texts[text])
         .on("click",function(){
-          var selected = legendPanel.selectAll("div.legend-item").filter(function(){ return this.selected; });
-          Graph.nodes.forEach(function(d){
-            delete d.selected;
-            if(checkSelectable(d)){
-              selected.each(function(value){
-                if(!d.selected){
-                  var key = this.parentNode.key;
-                  if(checkLegendKeyValue(d,key,value)){
-                    d.selected = true;
-                  }
-                }
-              })
-            }
-          });
+          selectItems("nodes",checkSelectableNode,nodesCallback);
+          selectItems("links",checkSelectableLink,linksCallback);
           showTables();
-          callback();
+
+          function selectItems(items,checkSelectable,callback){
+            var selected = legendPanel.selectAll(".legend."+items+" > div.legend-item").filter(function(){ return this.selected; });
+            if(!selected.empty()){
+              Graph[items].forEach(function(d){
+                delete d.selected;
+                if(checkSelectable(d)){
+                  selected.each(function(value){
+                    if(!d.selected){
+                      var key = this.parentNode.key;
+                      if(checkLegendKeyValue(d,key,value)){
+                        d.selected = true;
+                      }
+                    }
+                  })
+                }
+              });
+              callback();
+            }
+          }
         })
         .attr("title",tooltip)
 }
@@ -4310,228 +4597,250 @@ function getImageName(path){
 }
 
 function showTables() {
-  var hidden = getTableHiddenFields();
 
-  var totalItems = {};
-  ["nodes","links"].forEach(function(name){
-    totalItems[name] = (frameControls ? Graph[name].filter(function(d){ return !d._hideFrame; }) : Graph[name]).filter(name=="nodes" ? checkSelectable : checkSelectableLink).length;
-  });
+  var nodeColumns = getTableColumns("node"),
+      linkColumns = getTableColumns("link")
+      nodesData = Graph.nodes.filter(checkSelectableNode),
+      linksData = Graph.links.filter(checkSelectableLink),
+      selectedNodesData = nodesData.filter(function(n){ return n.selected; }),
+      selectedLinksData = linksData.filter(function(l){ return l.selected; });
 
-  var tableWrapper = function(dat, name, columns){
+  var tables = body.select("div.tables");
 
-    if(body.select("div.tables > ."+name).empty()){
-      return;
-    }
+  var tableInst = tableWrapper()
+    .update(function(){
+      if(!options.heatmap){
+        simulation.restart()
+      }
+      tables.select("button.primary.tableselection")
+        .classed("disabled",tables.selectAll("tr.selected").empty());
+    })
 
-    var currentData,
-        columnAlign = columns.map(function(col){
-          if(dataType(dat,col) == 'number'){
-            return "right";
-          }
-          return null;
-        });
-    if(name=="nodes")
-      currentData = Graph.nodes.filter(checkSelectable);
-    else
-      currentData = Graph.links.filter(checkSelectableLink);
-    var table = d3.select("div.tables > div."+name),
-        last = -1,
-    drawTable = function(d){
-      var tr = table.append("tr")
-        .datum(d.index)
-        .classed("selected",function(dd){
-          return currentData[dd]._selected;
-        });
-      columns.forEach(function(col,i){
-          var txt = renderCell(d[col]);
-          tr.append("td").html(txt)
-              .style("text-align",columnAlign[i])
-              .on("mousedown",function(){ d3.event.preventDefault(); });
-      });
-      tr.on("click",function(origin){
-          var selections = false;
-          if(d3.event.shiftKey && last!=-1){
-            selections = d3.range(Math.min(last,this.rowIndex),Math.max(last,this.rowIndex)+1);
-          }
-          table.selectAll("tr").classed("selected", function(d,i){
-            var selected = d3.select(this).classed("selected");
-            if(selections){
-              if(d3.event.ctrlKey || d3.event.metaKey){
-                selected = selected || selections.indexOf(i)!=-1;
-              }else{
-                selected = selections.indexOf(i)!=-1;
-              }
-            }else{
-              if(d3.event.ctrlKey || d3.event.metaKey){
-                selected = selected ^ d == origin;
-              }else{
-                selected = d == origin;
-                if(options.nodeText){
-                  plot.selectAll("div.tooltip").remove();
-                  if(name=="nodes"){
-                    showTooltip(currentData[origin],true);
-                  }else{
-                    showTooltip(currentData[origin].source,true);
-                    showTooltip(currentData[origin].target,true);
-                  }
-                }
-              }
-            }
-            if(!options.heatmap){
-              currentData[d]._selected = selected;                
-            }
-            return selected;
-          })
-          if(!options.heatmap)
-            simulation.restart();
-
-          d3.select("button.primary.tableselection").classed("disabled",table.selectAll("tr.selected").empty());
-
-          if(d3.select(this).classed("selected"))
-            last = this.rowIndex;
-          else
-            last = -1;
-        });
-    },
-
-    drawHeader = function() {
-        var thead = table.append("thead"),
-            tbody = table.append("tbody"),
-            desc0 = columns.map(function(){ return false; }),
-            desc = desc0.slice();
-        columns.forEach(function(d,i){
-          var sort1 = function(a,b){
-                if(a[d]==null) return 1;
-                if(b[d]==null) return -1;
-                a = a[d][options.nodeName]?a[d][options.nodeName]:a[d];
-                b = b[d][options.nodeName]?b[d][options.nodeName]:b[d];
-                return compareFunction(a,b,desc[i]);
-              };
-          thead.append("th")
-            .attr("class","sorting")
-            .text(d)
-            .style("text-align",columnAlign[i])
-            .on("click",function(){
-              tbody.html("");
-              dat.sort(sort1);
-              var desci = desc[i];
-              desc = desc0.slice();
-              thead.selectAll("th").attr("class","sorting");
-              desc[i] = !desci;
-              d3.select(this).attr("class",desci ? "sorting_desc" : "sorting_asc");
-              dat.forEach(drawTable);
-            });
-        });
-        return tbody;
-    }
-
-    d3.select("div.tables > div.table-header > div.table-title."+name)
-      .html("<span>"+texts[name+"attributes"] + "</span> ("+dat.length+" "+texts.outof+" "+totalItems[name]+")")
-    table.html("");
-    table = table.append("div");
-    if(dat.length==0){
-      table.style("cursor",null);
-      table.on('mousedown.drag', null);
-      table.text(texts.noitemsselected);
-    }else{
-      table = table.append("table");
-      table.on("mousedown", function(){ d3.event.stopPropagation(); })
-      table = drawHeader();
-      dat.forEach(drawTable);
-      table.each(function(){
-        var twidth = this.parentNode.offsetWidth,
-            itemDiv = d3.select(this.parentNode.parentNode.parentNode),
-            thidden = itemDiv.style("display") == "none";
-        if(thidden){
-          itemDiv.style("display",null);
-          twidth = this.parentNode.offsetWidth;
-          itemDiv.style("display","none");
-        }
-        d3.select(this.parentNode.parentNode)
-            .style("width",(twidth+8)+"px")
-            .style("cursor","col-resize")
-            .call(d3.drag()
-              .on("drag",function(){
-                var coorx = d3.mouse(this)[0],
-                    self = d3.select(this),
-                    selfTable = self.select("table");
-                selfTable.style("width",(coorx-8)+"px");
-                if(selfTable.node().offsetWidth > (coorx-8))
-                  selfTable.style("width",selfTable.node().offsetWidth+"px");
-                else
-                  self.style("width",coorx+"px");
-              })
-            )
-      })
-    }
-  },
-
-  cleanData = function(d){
-    var dReturn = {}, key;
-    for(key in d)
-      if(hidden.indexOf(key)==-1)
-        dReturn[key] = d[key];
-    return dReturn;
-  },
-
-  filterHidden = function(d){
-    return hidden.indexOf(d)==-1;
-  };
-
-  var nodesData = Graph.nodes.filter(function(n){
-        delete n._selected;
-        return checkSelectable(n) && n.selected;
-      }).map(cleanData),
-      linksData = Graph.links.filter(function(l){
-        delete l._selected;
-        return checkSelectableLink(l) && l.selected;
-      }).map(cleanData),
-      nodeColumns = Graph.nodenames.filter(filterHidden),
-      linkColumns = Graph.linknames.filter(filterHidden);
-
-  if(options.showCoordinates && !options.heatmap){
-    nodeColumns = d3.merge([nodeColumns,["x","y"]]);
-
-    nodesData.forEach(function(d){
-      d["x"] = parseFloat(scaleCoorX.invert(d["x"]).toFixed(2));
-      d["y"] = parseFloat(scaleCoorY.invert(d["y"]).toFixed(2));
-    });
+  if(options.showNodes){
+    tableInst
+      .item("nodes")
+      .data(nodesData)
+      .columns(nodeColumns)
+      .renderCell(renderNodeCell)
+      .selectAction(options.nodeText && !options.heatmap ? function(d){
+        plot.selectAll("div.tooltip").remove();
+        showTooltip(d,true);
+      } : false)
+  }
+  if(options.showLinks){
+    tableInst
+      .item("links")
+      .data(linksData)
+      .columns(linkColumns)
+      .renderCell(renderLinkCell)
+      .selectAction(options.nodeText && !options.heatmap ? function(d){
+        plot.selectAll("div.tooltip").remove();
+        showTooltip(d.source,true);
+        showTooltip(d.target,true);
+      } : false)
   }
 
-  tableWrapper(nodesData,"nodes",nodeColumns);
-  tableWrapper(linksData,"links",linkColumns);
+  tables.call(tableInst);
 
   // update frequency bars
   if(frequencyBars && options.frequencies){
     frequencyBars
-      .nodes(Graph.nodes.filter(checkSelectable))
+      .nodes(Graph.nodes.filter(checkSelectableNode))
       .nodeColor(options.nodeColor)
       .colorScale(VisualHandlers.nodeColor.getScale());
     infoPanel.open(function(div){
       frequencyBars(div);
     });
-  }else if(nodesData.length==0){
+  }
+
+  // update line plots
+  if(options.lineplots){
+    infoPanel.open(function(div){
+
+      changeItems();
+
+      function changeItems(){
+        div.selectAll("*").remove();
+        var header = div.append("div")
+          .attr("class","lineplots-header");
+        ["nodes","links"].forEach(function(items){
+          header.append("span")
+          .classed("active",options.lineplotsItems==items)
+          .text(texts[items])
+          .on("click",function(){
+            options.lineplotsItems = items;
+            changeItems();
+          })
+        })
+
+        if(options.lineplotsItems=="nodes" && !selectedNodesData.length){
+          var selectItem = function(value){
+            var nodes = [backupNodes[value]];
+            computeDegrees(nodes);
+            linePlots.items(nodes)
+              .colorHandler(VisualHandlers.nodeColor)
+              .colors(options.nodeColor ? VisualHandlers.nodeColor(Graph.nodes[value]) : false);
+            linePlots(container);
+          }
+          var select2 = header.append("div")
+            .style("float","right")
+            .attr("class","select-wrapper")
+            .append("select");
+          backupNodes.forEach(function(node,i){
+            var option = select2.append("option");
+            option.text(node[options.nodeName]);
+            option.property("value",i);
+          });
+          select2.on("change",function(){
+            selectItem(this.value);
+          });
+        }
+
+        if(options.lineplotsItems=="links" && !selectedLinksData.length){
+          var selectItem = function(value){
+            var nodenames = value.split(" -> "),
+                source = nodenames[0],
+                target = nodenames[1],
+                currentlink = Graph.links.filter(function(l){
+                  return l[options.linkSource]==source && l[options.linkTarget]==target && l["_frame_"]==frameControls.frame;
+                })[0];
+            linePlots.items(getLinkData(source,target))
+              .colorHandler(VisualHandlers.linkColor)
+              .colors(options.linkColor ? VisualHandlers.linkColor(currentlink) : false);
+            linePlots(container);
+          }
+          var select2 = header.append("div")
+            .style("float","right")
+            .attr("class","select-wrapper")
+            .append("select");
+          var linkslist = [];
+          Graph.links.forEach(function(link,i){
+            var text = link[options.linkSource] + " -> " + link[options.linkTarget];
+            if(linkslist.indexOf(text)==-1){
+              linkslist.push(text);
+              var option = select2.append("option");
+              option.text(text);
+              option.property("value",text);
+            }
+          });
+          select2.on("change",function(){
+            selectItem(this.value);
+          });
+        }
+
+        var container = div.append("div").attr("class","lineplots-container");
+
+        if(options.lineplotsItems=="nodes"){
+          linePlots
+            .getName(function(item){ return item[options.nodeName]; })
+            .bipolar(options.nodeBipolar);
+          if(selectedNodesData.length){
+            var colors = options.nodeColor ? selectedNodesData.map(function(node){ return VisualHandlers.nodeColor(node); }) : false,
+                nodes = selectedNodesData.map(function(node){
+                  var name = node[options.nodeName],
+                      newnode = backupNodes.filter(function(n){
+                        return n[options.nodeName]==name;
+                      })[0];
+                  return newnode;
+                });
+            computeDegrees(nodes);
+            linePlots.items(nodes)
+              .colorHandler(VisualHandlers.nodeColor)
+              .colors(colors);
+            linePlots(container);
+          }else{
+            selectItem(select2.property("value"));
+          }
+        }else if(options.lineplotsItems=="links"){
+          linePlots
+            .getName(function(item){ return item[options.linkSource] + " -> " + item[options.linkTarget]; })
+            .bipolar(options.linkBipolar);
+          if(selectedLinksData.length){
+            var links = selectedLinksData.map(function(link){
+                  return getLinkData(link[options.linkSource],link[options.linkTarget]);
+                });
+            linePlots.items(links)
+              .colorHandler(VisualHandlers.linkColor)
+              .colors(options.linkColor ? selectedLinksData.map(function(link){ return VisualHandlers.linkColor(link); }) : false);
+            linePlots(container);
+          }else{
+            selectItem(select2.property("value"));
+          }
+        }
+      }
+
+      function getLinkData(source,target){
+                  var dd = Graph.links.filter(function(l){
+                        return l[options.linkSource]==source && l[options.linkTarget]==target;
+                      }),
+                      newlink = {};
+                  newlink[options.linkSource] = source;
+                  newlink[options.linkTarget] = target;
+                  linePlots.variables().forEach(function(v){
+                    if(Graph.linknames.indexOf(v)!=-1){
+                      newlink[v] = [];
+                      frameControls.frames.forEach(function(f,i){
+                        var val = dd.filter(function(l){ return l["_frame_"]==i; });
+                        val = val.length ? val[0][v] : null;
+                        newlink[v].push(val);
+                      });
+                    }
+                  })
+                  return newlink;
+      }
+
+      function computeDegrees(nodes){
+            if(linePlots.variables().indexOf("degree")!=-1){
+              var degrees = {};
+              nodes.forEach(function(node){
+                degrees[node[options.nodeName]] = frameControls.frames.map(function(){ return 0; });
+              });
+              Graph.links.forEach(function(link){
+                if(!link._hidden && !link.target._hidden && !link.source._hidden && (!egoNet || ((link.source.selected || link.source._neighbor) && (link.target.selected || link.target._neighbor)))){
+                  ["Source","Target"].forEach(function(d){
+                    if(degrees.hasOwnProperty(link[d])){
+                      degrees[link[d]][link["_frame_"]]++;
+                    }
+                  })
+                }
+              });
+              nodes.forEach(function(node){
+                var name = node[options.nodeName];
+                node.degree = degrees.hasOwnProperty(name) ? degrees[name] : 0;
+              });
+            }
+      }
+    });
+  }
+
+  if(!options.frequencies && !options.lineplots && selectedNodesData.length==0){
     infoPanel.close();
   }
 
   // highlight egonet of selection
   if(!options.heatmap){
-    var names = nodesData.map(function(node){ return node[options.nodeName]; });
-    if(nodesData.length && nodesData.length!=totalItems["nodes"]){
+    var names = selectedNodesData.map(function(node){ return node[options.nodeName]; });
+    if(selectedNodesData.length && selectedNodesData.length!=nodesData.length){
       Graph.nodes.forEach(function(node){
         delete node._back;
-        if(checkSelectable(node) && !node.selected){
+        if(checkSelectableNode(node) && !node.selected){
           node._back = true;
         }
       })
       Graph.links.forEach(function(link){
         delete link._back;
         if(checkSelectableLink(link)){
-          if(names.indexOf(link[options.linkSource])!=-1 || names.indexOf(link[options.linkTarget])!=-1){
-            delete link.source._back;
-            delete link.target._back;
+          if(options.highlightNeighbors){
+            if(names.indexOf(link[options.linkSource])!=-1 || names.indexOf(link[options.linkTarget])!=-1){
+              delete link.source._back;
+              delete link.target._back;
+            }else{
+              link._back = true;
+            }
           }else{
-            link._back = true;
+            if(names.indexOf(link[options.linkSource])==-1 || names.indexOf(link[options.linkTarget])==-1){
+              link._back = true;
+            }
           }
         }
       })
@@ -4553,12 +4862,12 @@ function showTables() {
   checkLegendItemsChecked();
 
   // enable/disable selection buttons
-  if(nodesData.length){
-    d3.selectAll("button.primary.selectneighbors, button.primary.isolate, button.primary.filter").classed("disabled",!(nodesData.length<totalItems["nodes"]));
+  if(selectedNodesData.length){
+    d3.selectAll("button.primary.selectneighbors, button.primary.isolate, button.primary.filter").classed("disabled",!(selectedNodesData.length<nodesData.length));
     if(Graph.tree){
       d3.selectAll("button.primary.expand, button.primary.collapse").classed("disabled",true);
       Graph.nodes.forEach(function(node){
-        if(checkSelectable(node) && node.selected){
+        if(checkSelectableNode(node) && node.selected){
           if(node.childNodes.length){
             d3.selectAll("button.primary.expand").classed("disabled",false);
           }
@@ -4569,15 +4878,29 @@ function showTables() {
       });
     }
   }else{
-    d3.selectAll("button.primary.tableselection, button.primary.selectneighbors, button.primary.isolate, button.primary.filter, button.primary.expand, button.primary.collapse").classed("disabled",true);
+    d3.selectAll("button.primary.selectneighbors, button.primary.isolate, button.primary.filter, button.primary.expand, button.primary.collapse").classed("disabled",true);
   }
 }
 
-function getTableHiddenFields(){
-  return hiddenFields.slice((options.showCoordinates && !options.heatmap) ? 2 : 0);
+function getTableColumns(item){
+  var names = Graph[item+"names"].filter(function(d){ return !hiddenFields.has(d); });
+  if(item=="node" && options.showCoordinates && !options.heatmap){
+    names.push("x");
+    names.push("y")
+  }
+  return names;
 }
 
-function renderCell(txt){
+function renderNodeCell(item,key){
+  var txt = item[key];
+  if(!options.heatmap && options.showCoordinates){
+    if(key=="x"){
+      return scaleCoorX.invert(item["x"]).toFixed(2);
+    }
+    if(key=="y"){
+      return scaleCoorY.invert(item["y"]).toFixed(2);
+    }
+  }
   if(txt == null){
     return "";
   }
@@ -4594,30 +4917,52 @@ function renderCell(txt){
   return String(txt);
 }
 
+function renderLinkCell(item,key){
+  var txt = item[key];
+  if(txt == null){
+    return "";
+  }
+  if(typeof txt == 'object'){
+    return txt.join("; ");
+  }
+  if(typeof txt == 'number'){
+    return formatter(txt);
+  }
+  return String(txt);
+}
+
 // check checkboxes after node selections
 function checkLegendItemsChecked() {
     var parent = legendPanel.select(".legends > div.legends-content"),
         legendSelectAll = legendPanel.select(".legend-selectall");
     if(!legendSelectAll.empty()){
+      checkItems("nodes",checkSelectableNode);
+      checkItems("links",checkSelectableLink);
+
       var items = parent.selectAll(".legend-item");
       if(!items.empty()){
-        var unselectedNodes = Graph.nodes.filter(checkSelectable).filter(function(d){ return !d.selected; });
+        var size = items.filter(function(){ return this.selected; }).size();
+        checkInBox(legendSelectAll.node(), size ? true : false);
+        legendPanel.selectAll("button.legend-bottom-button").classed("disabled",!size || size==items.size());
+      }
+    }
 
+    function checkItems(itemsname,checkSelectable){
+      var items = parent.selectAll(".legend."+itemsname+" > .legend-item"),
+          unselected, key, i, d;
+      if(!items.empty()){
+        unselected = Graph[itemsname].filter(checkSelectable).filter(function(d){ return !d.selected; });
         items.each(function(value){
           checkInBox(this,true);
-          var key = this.parentNode.key;
-          for(var i = 0; i<unselectedNodes.length; i++){
-            var d = unselectedNodes[i];
+          key = this.parentNode.key;
+          for(i = 0; i<unselected.length; i++){
+            d = unselected[i];
             if(checkLegendKeyValue(d,key,value)){
               checkInBox(this,false);
               break;
             }
           }
         })
-
-        var size = items.filter(function(){ return this.selected; }).size();
-        checkInBox(legendSelectAll.node(), size ? true : false);
-        legendPanel.selectAll("button.legend-bottom-button").classed("disabled",!size || size==items.size());
       }
     }
 
@@ -4630,21 +4975,20 @@ function checkLegendItemsChecked() {
 }
 
 function tables2xlsx(){
-      var hidden = getTableHiddenFields();
-      var nodenames = Graph.nodenames.filter(function(d){ return hidden.indexOf(d)==-1; }),
+      var nodenames = getTableColumns("node"),
           nodes = [nodenames],
-          linknames = Graph.linknames.filter(function(d){ return hidden.indexOf(d)==-1; }),
+          linknames = getTableColumns("link"),
           links = [linknames];
       
       Graph.nodes.forEach(function(node){
         if(node.selected){
-          nodes.push(nodenames.map(function(col){ return renderCell(node[col]); }));
+          nodes.push(nodenames.map(function(col){ return renderNodeCell(node,col); }));
         }
       })
 
       Graph.links.forEach(function(link){
         if(link.selected){
-          links.push(linknames.map(function(col){ return renderCell(link[col]); }));
+          links.push(linknames.map(function(col){ return renderLinkCell(link,col); }));
         }
       })
 
@@ -4658,43 +5002,45 @@ function tables2xlsx(){
       }
 }
 
-function selectNodesFromTable(){
-        var names = [],
-            index = 0,
-            trSelected;
-        if(d3.select("div.tables > div.nodes").style("display")=="block"){
-          trSelected = d3.selectAll("div.tables > div.nodes table tr.selected");
-          if(!trSelected.empty()){
-            d3.selectAll("div.tables > div.nodes table th").each(function(d,i){
+function selectFromTable(){
+      var names = [],
+          index = 0,
+          table = body.select("div.tables > div.table-container > table"),
+          trSelected = table.selectAll("tr.selected");
+      if(!trSelected.empty()){
+        if(options.showNodes){
+            table.selectAll("th").each(function(d,i){
               if(this.textContent == options.nodeName)
                 index = i+1;
             })
+
             trSelected
               .each(function(){
                 names.push(d3.select(this).select("td:nth-child("+index+")").text());
               })
               .classed("selected",false);
-          }
+
+            Graph.nodes.forEach(function(d){
+              d.selected = names.indexOf(d[options.nodeName]) != -1;
+            });
         }else{
-          trSelected = d3.selectAll("div.tables > div.links table tr.selected");
-          if(!trSelected.empty()){
             trSelected
               .each(function(){
-                for(var i=1; i<=2; i++){
-                  index = d3.select(this).select("td:nth-child("+i+")").text();
-                  if(names.indexOf(index)==-1)
-                    names.push(index);
-                }
+                var source = d3.select(this).select("td:nth-child(1)").text(),
+                    target = d3.select(this).select("td:nth-child(2)").text();
+                names.push(source+"_"+target);
               })
               .classed("selected",false);
-          }
+
+            Graph.links.forEach(function(d){
+              delete d.selected;
+              if(names.indexOf(d.Source+"_"+d.Target)!=-1){
+                d.selected = true;
+              }
+            });
         }
-        if(!trSelected.empty()){
-          Graph.nodes.forEach(function(d){
-            d.selected = names.indexOf(d[options.nodeName]) != -1;
-          });
-          showTables();
-        }
+        showTables();
+      }
 }
 
 function getLayoutRange(){
@@ -4895,7 +5241,15 @@ function embedImages(callback){
 
       images64 = {};
 
-      var imgLinks = d3.set(d3.merge(options.imageItems.map(function(d){ return Graph.nodes.map(function(dd){ return dd[d]; }); }))).values();
+      var imgLinks = d3.set(d3.merge(options.imageItems.map(function(d){
+        return d3.merge(Graph.nodes.map(function(dd){
+          var uri = dd[d];
+          if(typeof uri == "string"){
+            uri = [uri];
+          }
+          return uri;
+        }));
+      }))).values();
 
       var loadImage = function(i){
         var imgSrc = imgLinks[i++];
@@ -4904,8 +5258,8 @@ function embedImages(callback){
         canvas.width = img.width;
         canvas.height = img.height;
         var ctx = canvas.getContext("2d");
-        ctx.drawImage(img, 0, 0);
         try{
+            ctx.drawImage(img, 0, 0);
             images64[imgSrc] = canvas.toDataURL();
         }catch(e){
             console.log(e);
@@ -4942,7 +5296,8 @@ function svg2png(callback){
   if(options.main){
     svg.append("text")
       .attr("class","main")
-      .attr({"x":+svg.attr("width")/2, "y":30})
+      .attr("x", +svg.attr("width")/2)
+      .attr("y", 30)
       .style("text-anchor","middle")
       .style("font-size",d3.select("div.main span.title").style("font-size"))
       .text(options.main);
@@ -4950,7 +5305,8 @@ function svg2png(callback){
   if(options.note){
     svg.append("text")
       .attr("class","note")
-      .attr({"x":10, "y":+svg.attr("height")-10})
+      .attr("x",10)
+      .attr("y",+svg.attr("height")-10)
       .style("font-size",d3.select("div.note").style("font-size"))
       .text(options.note);
   }
@@ -5046,6 +5402,13 @@ function computeHeight(){
       h = h - 165;
     }
     return h;
+}
+
+function computeTablesHeight(){
+  if(body.classed("maximize-table")){
+    return docSize.height - 20;
+  }
+  return docSize.height - height - (main ? main.node().offsetHeight : 0) - 20;
 }
 
 window.onresize = function(){

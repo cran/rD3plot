@@ -6,8 +6,13 @@ wwwDirectory = function(){
 createHTML <- function(directory, styles, dependencies, json){
   indexfile <- paste(directory, "index.html", sep = "/")
   if(file.exists(directory)){
-    if(length(dir(directory))==0 || file.exists(indexfile)){
-      unlink(directory, recursive = TRUE)
+    if(file.exists(indexfile)){
+      content <- scan(file = indexfile, what = character(0), sep = "\n", quiet = TRUE)
+      if(sum(content=="<!--netCoin Project-->")==1){
+        unlink(directory, recursive = TRUE)
+      }else{
+        stop(paste0("directory: '",directory,"' already exists"))
+      }
     }else{
       stop(paste0("directory: '",directory,"' already exists"))
     }
@@ -390,6 +395,17 @@ showSomething <- function(opt,item,show){
     return(opt)
 }
 
+check_defaultColor <- function(defaultColor){
+  if(!is.null(defaultColor)){
+    if(isColor(defaultColor)){
+      return(col2hex(defaultColor))
+    }else{
+      warning("defaultColor: you must pass a valid color")
+    }
+  }
+  return(NULL)
+}
+
 # igraph -> network_rd3
 rd3_fromIgraph <- function(G, ...){
   if (inherits(G,"igraph")){
@@ -498,5 +514,23 @@ rd3_toIgraph <- function(net){
   }else{
     warning("Is not a network_rd3 object")
   }
+}
+
+base64encode <- function(filename) {
+  to.read = file(filename, "rb")
+  fsize <- file.size(filename)
+  sbit <- readBin(to.read, raw(), n = fsize, endian = "little")
+  close(to.read)
+  b64c <- "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+  shfts <- c(18,12,6,0)
+  sand <- function(n,s) bitwAnd(bitwShiftR(n,s),63)+1
+  slft <- function(p,n) bitwShiftL(as.integer(p),n)
+  subs <- function(s,n) substring(s,n,n)
+  npad <- ( 3 - length(sbit) %% 3) %% 3
+  sbit <- c(sbit,as.raw(rep(0,npad)))
+  pces <- lapply(seq(1,length(sbit),by=3),function(ii) sbit[ii:(ii+2)])
+  encv <- paste0(sapply(pces,function(p) paste0(sapply(shfts,function(s)(subs(b64c,sand(slft(p[1],16)+slft(p[2],8)+slft(p[3],0),s)))))),collapse="")
+  if (npad > 0) substr(encv,nchar(encv)-npad+1,nchar(encv)) <- paste0(rep("=",npad),collapse="")
+  return(encv)
 }
 

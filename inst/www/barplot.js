@@ -3,7 +3,7 @@ function barplot(json){
   var options = json.options,
       nodes = json.nodes,
       links = json.links,
-      filter = false,
+      itemsFiltered = false,
       sigFilter = 0;
 
   var body = d3.select("body");
@@ -89,6 +89,9 @@ function barplot(json){
 
   // top bar
   var topBar = displayTopBar();
+  if(options.multipages){
+    topBar.goback(true);
+  }
   body.call(topBar);
 
   topBar.addIcon(iconButton()
@@ -188,7 +191,6 @@ function barplot(json){
   var topFilterInst = topFilter()
     .data(nodes)
     .datanames(getOptions(nodes))
-    .attr(options.name)
     .displayGraph(displayGraph);
 
   topBar.addBox(topFilterInst);
@@ -278,9 +280,10 @@ function barplot(json){
         whiskers = subject && options.confidence && !options.significance;
 
     if(typeof newfilter != "undefined")
-      filter = newfilter;
+      itemsFiltered = newfilter;
 
     if(subject){
+      var itemsFilteredNames = itemsFiltered ? itemsFiltered.map(function(d){ return d[options.name]; }) : false;
       links.forEach(function(d){
         if(d.Source == subject || d.Target == subject){
           var row = {};
@@ -297,7 +300,7 @@ function barplot(json){
                 return;
             }
           }
-          if(!filter || filter.indexOf(row.object)!=-1){
+          if(!itemsFilteredNames || itemsFilteredNames.indexOf(row.object)!=-1){
             row.a = d[options.coincidences];
             if(options.expected){
               row.b = d[options.expected];
@@ -318,15 +321,13 @@ function barplot(json){
         }
       })
     }else{
-      nodes.forEach(function(d){
-        if(!filter || filter.indexOf(d[options.name])!=-1){
+      (itemsFiltered ? itemsFiltered : nodes).forEach(function(d){
           var row = {};
           row.object = d[options.name];
           row.b = d[options.incidences];
           if(options.text)
             row.t = d[options.text];
           data.push(row);
-        }
       })
     }
 

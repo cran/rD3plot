@@ -4,19 +4,20 @@ function gallery(Graph){
       width = docSize.width,
       height = docSize.height,
       options = Graph.options,
-      filter = false,
+      itemsFiltered = false,
       zoomRange = [0.1, 10],
       gridHeight = 60,
-      currentGridHeight = gridHeight;
+      currentGridHeight = gridHeight,
+      colorScale,
+      pagination = false,
+      treeParent = [];
 
-  if(!options.defaultColor){
-    options.defaultColor = categoryColors[0];
-  }
+  options.defaultColor = defaultColorManagement(options.defaultColor);
   options.colorScalenodeColor = "RdWhGn"; // default linear scale
 
   var splitMultiVariable = function(d){
       for(var p in d) {
-        if(p!=options.nodeName){
+        if(p!=options.nodeName && p!=options.nodeText && p!=options.nodeInfo){
           if(typeof d[p] == "string" && d[p].indexOf("|")!=-1){
             var aux = d[p].split("|");
             d[p] = aux.map(function(d){ return d=="" ? null : (isNaN(parseInt(d)) ? d : +d); });
@@ -37,13 +38,19 @@ function gallery(Graph){
       nodes.push(node);
   }
 
+  if(nodes.length>1000){
+    pagination = 1;
+  }
+
   options.showTopbar = showControls(options,1);
   options.showExport = showControls(options,2);
+  options.showExport2 = showControls(options,3);
+  options.showTable = showControls(options,4);
+  options.showProjectIcon = showControls(options,5);
 
   var topFilterInst = topFilter()
     .data(nodes)
     .datanames(getSelectOptions(sortAsc))
-    .attr(options.nodeName)
     .displayGraph(displayGraph);
 
   var frequencyBars = false;
@@ -117,8 +124,11 @@ function gallery(Graph){
           return;
         case "s":
           d3.event.preventDefault();
-          nodes.forEach(function(n){ n.selected = true; });
-          displayGraph();
+          selectAllItems();
+          return;
+        case "o":
+          d3.event.preventDefault();
+          body.select("button.tableselection").dispatch("click");
           return;
       }
     }
@@ -130,6 +140,12 @@ function gallery(Graph){
   // top bar
   var topBar = displayTopBar()
     .title(options.main);
+  if(options.multipages){
+    topBar.goback(true);
+  }
+  if(!options.showProjectIcon){
+    topBar.netCoin(false);
+  }
   galleryBox.call(topBar);
 
   if(options.help){
@@ -150,14 +166,16 @@ function gallery(Graph){
         .src(b64Icons.pdf)
         .title(texts.pdfexport)
         .job(gallery2pdf));
+  }
 
+  if(options.showTable){
     topBar.addIcon(iconButton()
-        .alt("xlsx")
+        .alt("table")
         .width(24)
         .height(24)
-        .src(b64Icons.xlsx)
-        .title(texts.downloadtable)
-        .job(nodes2xlsx));
+        .src(b64Icons.table)
+        .title(texts.Table)
+        .job(displayTable));
   }
 
   if(frequencyBars){
@@ -175,11 +193,10 @@ function gallery(Graph){
 
   // node multi search
   topBar.addBox(displayMultiSearch()
-        .data(nodes)
+        .data(itemsFiltered ? itemsFiltered : nodes)
         .column(options.nodeLabel)
-        .update(displayGraph)
-        .update2(filterSelection)
-        .filterData(filterNodes));
+        .updateSelection(displayGraph)
+        .updateFilter(filterSelection));
 
   // count elements
   var elementsCount;
@@ -206,9 +223,9 @@ function gallery(Graph){
       if(options.nodeColor=="_none_"){
         delete options.nodeColor;
       }else if(dataType(nodes,options.nodeColor)=="number"){
-        displayPicker(options,"nodeColor",displayGraph);
+        displayPicker(options,"nodeColor",displayGraphColor);
       }
-      displayGraph();
+      displayGraphColor();
     })
     var opt = getSelectOptions(sortAsc).map(function(d){ return [d,d]; });
     opt.unshift(["_none_","-"+texts.none+"-"]);
@@ -220,12 +237,21 @@ function gallery(Graph){
         .property("selected",function(d){ return d[0]==options.nodeColor ? true : null; })
   });
 
-  // Deselect
+  // node filter in topBar
+  topBar.addBox(topFilterInst);
+
+  // Select all / none
   topBar.addBox(function(box){
     box.append("button")
       .attr("class","primary")
-      .text(texts.Deselect)
-      .on("click",deselectAllItems)
+      .text(texts.selectallnone)
+      .on("click",function(){
+        if(nodes.filter(function(n){ return n.selected; }).length==(itemsFiltered ? itemsFiltered.length : nodes.length)){
+          deselectAllItems();
+        }else{
+          selectAllItems();
+        }
+      })
   })
 
   // filter selection
@@ -235,10 +261,6 @@ function gallery(Graph){
       .text(texts.filterselection)
       .on("click",filterSelection)
   });
-
-  // node filter in topBar
-  topBar.addBox(topFilterInst);
-
 
   var content = galleryBox.append("div")
         .attr("class","gallery-content");
@@ -277,6 +299,18 @@ function gallery(Graph){
   var gallery = content.append("div")
         .attr("class","grid-gallery");
 
+  if(pagination){
+    gallery.on("scroll",function(){
+      if(this.scrollTop==0){
+        pagination = 1;
+        displayGraph();
+      }else if((this.scrollTop + this.clientHeight >= (this.scrollHeight-(this.clientHeight*2))) && (galleryItems.selectAll("div.item").size()<(itemsFiltered ? itemsFiltered.length : nodes.length))) {
+        pagination++;
+        displayGraph();
+      }
+    })
+  }
+
   if(descriptionPanel && options.descriptionWidth){
       descriptionPanel.style("width",options.descriptionWidth+"%")
       gallery.style("width",(100-options.descriptionWidth)+"%")
@@ -308,7 +342,7 @@ function gallery(Graph){
                  .displayGraph(displayGraph)
                  .filterHandler(topFilterInst)
                  .displayScalePicker(function(){
-                   displayPicker(options,"nodeColor",displayGraph);
+                   displayPicker(options,"nodeColor",displayGraphColor);
                  })
                  .selectionWindow(attrSelectionWindow()
                    .list(getSelectOptions(sortAsc))
@@ -345,9 +379,14 @@ function gallery(Graph){
       .attr("class","gallery-note")
       .html(options.note)
   }else{
-    galleryBox.append("div")
+    var footer = galleryBox.append("div")
       .attr("class","footer")
-      .html("<span class=\"flipH\">&copy;</span> "+new Date().getFullYear()+" NETCOIN PROJECT")
+    footer.append("img")
+      .attr("height",20)
+      .style("vertical-align","middle")
+      .attr("src",b64Icons.netcoinblack)
+    footer.append("span")
+      .text("netCoin")
   }
 
   if(options.help && options.helpOn){
@@ -358,11 +397,7 @@ function gallery(Graph){
     options.zoom = 1;
 
     var currentItemsPerRow = options.itemsPerRow,
-        prevk = options.zoom,
-        sizeByItemsPerRow = function(itemsPerRow){
-          var w = Math.floor((gallery.node().offsetWidth-12) / itemsPerRow)-18;
-          return w/options.aspectRatio;
-        }
+        prevk = options.zoom;
     
     getCurrentHeight = function(k){
           if(k == 1){
@@ -375,44 +410,94 @@ function gallery(Graph){
             }
           }
           prevk = k;
-          return sizeByItemsPerRow(currentItemsPerRow);
+          return Math.floor((gallery.node().offsetWidth-24) / currentItemsPerRow)-18;
     }
 
-    // check aspect ratio
-    var img = new Image();
-    img.onload = function() {
-      options.aspectRatio = getImgRatio(this);
-      currentGridHeight = sizeByItemsPerRow(currentItemsPerRow);
-      gridHeight = currentGridHeight;
-      resetZoom();
-    }
-    img.src = nodes[0][options.imageItems];
+    currentGridHeight = getCurrentHeight(1);
+    gridHeight = currentGridHeight;
+    resetZoom();
   }else{
     resetZoom();
+  }
+
+  if(typeof tutorialTour != "undefined"){
+    tutorialTour(options);
   }
 
   function resetZoom(){
     gallery.call(zoom.transform,d3.zoomIdentity.scale(options.zoom));
   }
 
+  function displayGraphColor(){
+    colorScale = undefined;
+    displayGraph();
+  }
+
   function displayGraph(newfilter){
 
-    if(typeof newfilter != "undefined")
-      filter = newfilter;
+    if(typeof newfilter != "undefined"){
+      nodes.forEach(function(node){ delete node.selected; });
+      itemsFiltered = newfilter;
+    }
 
-    var data = nodes.filter(filterNodes);
+    var filteredData = itemsFiltered ? itemsFiltered : nodes;
 
-    elementsCount.text(data.length);
+    if(Graph.tree){
+      galleryBox.select(".topbar > .breadcrumbs").remove();
+      if(treeParent.length){
+        var breadcrumbs = galleryBox.select(".topbar").append("div")
+          .attr("class","breadcrumbs")
+          .style("padding","4px 12px")
+        breadcrumbs.append("span")
+          .text("home")
+          .style("cursor","pointer")
+          .style("color",basicColors.mediumBlue)
+          .on("click",function(){
+            treeParent = [];
+            displayGraph();
+          })
+        treeParent.forEach(function(parent,i){
+          breadcrumbs.append("span").text(" > ")
+          breadcrumbs.append("span").text(parent)
+            .style("cursor","pointer")
+            .style("color",basicColors.mediumBlue)
+            .attr("index",i)
+            .on("click",function(){
+              var idx = +d3.select(this).attr("index");
+              treeParent = treeParent.filter(function(e,j){
+                return j<=idx;
+              });
+              displayGraph();
+            })
+        });
+      }
 
+      filteredData = filteredData.filter(function(d){
+        if(!treeParent.length){
+          return Graph.tree[1].indexOf(d[options.nodeName])==-1;
+        }
+        return Graph.tree[0].filter(function(e,i){ return treeParent[treeParent.length-1]==e && Graph.tree[1][i]==d[options.nodeName]; }).length;
+      });
+    }
+
+    elementsCount.text(filteredData.length);
+
+    var orderedData = filteredData.slice();
     if(options.order){
-      data.sort(function(a,b){
+      orderedData.sort(function(a,b){
         var aa = a[options.order],
             bb = b[options.order];
         return compareFunction(aa,bb,options.rev);
       })
     }
 
-    var items = galleryItems.selectAll(".item").data(data, function(d){ return d[options.nodeName]; });
+    var displayData = orderedData;
+    if(pagination){
+      var limit  = Math.max(1000,(width/(currentGridHeight+12) * height/(currentGridHeight+12)));
+      displayData = orderedData.filter(function(d,i){ return i<pagination*limit; });
+    }
+
+    var items = galleryItems.selectAll(".item").data(displayData, function(d){ return d[options.nodeName]; });
 
     var itemsEnter = items.enter()
           .append("div").attr("class","item")
@@ -421,11 +506,13 @@ function gallery(Graph){
           .attr("class","img-wrapper")
     if(options.imageItems){
       imgWrapper.append("img")
-          .on("load", options.aspectRatio ? function(){
-            imgMarginLeft(this,getImgRatio(this));
-          } : function(){
-            itemWidth(d3.select(this.parentNode.parentNode),getImgRatio(this));
-          })
+          .on("load", !options.roundedItems && !options.itemsPerRow ? function(){
+            this.ratio = 1;
+            if(this.complete && this.naturalHeight!==0){
+              this.ratio = this.naturalWidth / this.naturalHeight;
+            }
+            d3.select(this.parentNode.parentNode).style("width",(currentGridHeight*this.ratio)+"px");
+          } : null)
           .attr("src",function(n){ return n[options.imageItems]; });
     }
 
@@ -433,53 +520,23 @@ function gallery(Graph){
         .attr("title",function(d){ return d[options.nodeLabel]; })
         .text(function(d){ return d[options.nodeLabel]; })
 
-    if(options.nodeText){
-      itemsEnter.each(function(d){
-        if(d[options.nodeText]){
-          var tooltip = d3.select(this).append("div")
-            .attr("class","tooltip")
-            .style("display","none")
-            .html(d[options.nodeText])
-            
-          d3.select(this)
-              .on("mouseenter",function(){
-                tooltip.style("display","block");
-                if(d3.mouse(gallery.node())[0]>(gallery.node().offsetWidth/2)){
-                  tooltip
-                    .style("left","unset")
-                    .style("right",0);
-                }
-              })
-              .on("mouseleave",function(){
-                tooltip.style("display","none")
-                  .style("left",null)
-                  .style("right",null);
-              })
-        }
-      });
-    }
-
     items.exit().remove();
-
-    items.order();
 
     var itemsUpdate = itemsEnter.merge(items);
     itemsUpdate.classed("selected",function(n){ return n.selected; });
 
+    itemsUpdate.order();
+
     itemsUpdate
       .select(".img-wrapper")
         .style("height",currentGridHeight+"px")
-    itemsUpdate.each(function(){
-      var item = d3.select(this),
-          ratio = 1;
-      if(options.aspectRatio){
-        ratio = options.aspectRatio;
-      }else if(options.imageItems){
-        var img = item.select(".img-wrapper > img").node();
-        ratio = getImgRatio(img);
-      }
-      itemWidth(item,ratio);
-    })
+        .style("border-width", typeof options.nodeBorder == "number" ? options.nodeBorder+"px" : null);
+
+    itemsUpdate.style("width",function(){
+      var img = this.querySelector("img"),
+          ratio = img && img.ratio ? img.ratio : 1;
+      return (currentGridHeight*ratio)+"px";
+    });
 
     itemsUpdate.selectAll(".item > span").style("font-size",(currentGridHeight/72)+"em")
 
@@ -487,34 +544,133 @@ function gallery(Graph){
       .on("click",function(n){
           d3.event.stopPropagation();
           if(d3.event.ctrlKey || d3.event.metaKey){
-
+            displayData.forEach(function(n){ delete n.selected; });
+            n.selected = true;
+          }else if(d3.event.shiftKey){
+            n.selected = true;
+            var ext = d3.extent(displayData.map(function(d,i){ return [i,d.selected]; }).filter(function(d){ return d[1]; }).map(function(d){ return d[0]; }));
+            d3.range(ext[0],ext[1]).forEach(function(i){
+              displayData[i].selected = true;
+            });
+          }else{
             if(n.selected){
               delete n.selected;
             }else{
               n.selected = true;
             }
-          }else if(d3.event.shiftKey){
-            n.selected = true;
-            var ext = d3.extent(data.map(function(d,i){ return [i,d.selected]; }).filter(function(d){ return d[1]; }).map(function(d){ return d[0]; }));
-            d3.range(ext[0],ext[1]).forEach(function(i){
-              data[i].selected = true;
-            });
-          }else{
-            data.forEach(function(n){ delete n.selected; });
-            n.selected = true;
           }
-          displayGraph();
           if(options.nodeInfo){
-            if(descriptionPanel && !options.frequencies){
-              displayInDescription(n[options.nodeInfo]);
+            if(options.infoFrame=="left"){
+              if(descriptionPanel && !options.frequencies){
+                displayInDescription(n[options.nodeInfo]);
+                var template = descriptionPanel.select(".description-content > .panel-template, .description-content > .info-template");
+                if(!template.empty()){
+                  template.selectAll("a[target=rightframe]").on("mousedown",function(){
+                    infoPanel.changeInfo('<iframe name="rightframe"></iframe>');
+                  });
+                  template.selectAll("a[target=leftframe]").on("mousedown",function(){
+                    descriptionPanel.select(".description-content").append("iframe").attr("name","leftframe");
+                  }).on("mouseup",function(){
+                    template.style("display","none");
+                  })
+                }
+              }
             }else{
               infoPanel.changeInfo(n[options.nodeInfo]);
             }
+            body.select(".panel-template.auto-color").datum(n);
           }
-      })
+          if(options.nodeText && n[options.nodeText]){
+            if(body.selectAll(".tooltip").filter(function(d){
+              return d==n[options.nodeName];
+            }).empty()){
+              var tooltip = body.append("div")
+              .attr("class","tooltip")
+              .datum(n[options.nodeName])
+              .style("cursor","grab")
+              .style("display","block")
+              .html(n[options.nodeText])
 
-    var colorScale;
-    if(options.nodeColor){
+              var template = tooltip.select(".info-template, .panel-tempalte");
+              if(!template.empty()){
+                template.selectAll("a[target=rightframe]").on("mousedown",function(){
+                  infoPanel.changeInfo('<iframe name="rightframe"></iframe>');
+                });
+                if(descriptionPanel){
+                  template.selectAll("a[target=leftframe]").on("mousedown",function(){
+                    displayInDescription('<iframe name="leftframe"></iframe>');
+                  });
+                }
+              }
+
+              tooltip.append("div")
+              .attr("class","close-button")
+              .on("click",function(){
+                d3.event.stopPropagation();
+                tooltip.remove();
+              })
+              tooltip.call(d3.drag()
+              .on("start",function(){
+                tooltip.style("cursor","grabbing");
+                tooltip.datum(d3.mouse(tooltip.node()));
+              })
+              .on("drag",function(){
+                var coor = d3.mouse(body.node().parentNode),
+                    coor2 = tooltip.datum();
+                coor[0] = coor[0]-coor2[0];
+                coor[1] = coor[1]-coor2[1];
+                tooltip
+                 .style("top",(coor[1])+"px")
+                 .style("left",(coor[0])+"px")
+              })
+              .on("end",function(){
+                tooltip.style("cursor","grab");
+                tooltip.datum(null);
+              })
+              );
+              var coor = d3.mouse(body.node());
+              if(coor[0]>(body.node().offsetWidth/2)){
+                tooltip
+                  .style("left",(coor[0]-tooltip.node().offsetWidth-10)+"px")
+              }else{
+                tooltip
+                  .style("left",(coor[0]+10)+"px")
+              }
+              if(coor[1]>(body.node().offsetHeight/2)){
+                tooltip
+                  .style("top",(coor[1]-tooltip.node().offsetHeight-10)+"px")
+              }else{
+                tooltip
+                  .style("top",(coor[1]+10)+"px")
+              }
+              tooltip.select(".tooltip > .info-template > h2.auto-color").style("background-color",function(d){
+                if(options.nodeColor){
+                  return applyColorScale(colorScale,n[options.nodeColor]);
+                }
+                return options.defaultColor;
+              })
+            }
+          }
+          displayGraph();
+      })
+      .on("dblclick", Graph.tree ? function(d){
+        if(Graph.tree[0].indexOf(d[options.nodeName])!=-1){
+          nodes.forEach(function(node){ delete node.selected; });
+          treeParent.push(d[options.nodeName]);
+          displayGraph();
+        }
+      } : null)
+
+    if(options.nodeBorder && Graph.nodenames.indexOf(options.nodeBorder)!=-1 && dataType(nodes,options.nodeBorder)=="number"){
+      var borderScale = d3.scaleLinear()
+            .range([1,5])
+            .domain(d3.extent(nodes,function(d){ return d[options.nodeBorder]; }));
+      itemsUpdate.select(".img-wrapper").style("border-width",function(d){
+        return borderScale(d[options.nodeBorder]) + "px";
+      })
+    }
+
+    if(!colorScale && options.nodeColor){
       if(Graph.nodenames.indexOf("_color_"+options.nodeColor)!=-1){
           var aux = uniqueRangeDomain(nodes, options.nodeColor, "_color_"+options.nodeColor);
           colorScale = d3.scaleOrdinal()
@@ -533,6 +689,7 @@ function gallery(Graph){
           colorScale = d3.scaleLinear()
             .range(range)
             .domain(domain)
+            .clamp(true)
         }
         if(type=="string"){
           colorScale = d3.scaleOrdinal()
@@ -561,7 +718,7 @@ function gallery(Graph){
       }
     }
     legend
-      .data(data)
+      .data(orderedData)
       .value(options.nodeColor)
       .scale(colorScale)
     legendPanel.call(legend);
@@ -574,7 +731,7 @@ function gallery(Graph){
         return null;
       })
     }else{
-      itemsUpdate.select("div:first-child").style("background-color",function(d){
+      itemsUpdate.select(".img-wrapper").style("background-color",function(d){
         if(options.nodeColor){
             return applyColorScale(colorScale,d[options.nodeColor]);
         }
@@ -582,9 +739,19 @@ function gallery(Graph){
       })
     }
 
+    var panelTemplate = body.select(".panel-template.auto-color");
+    if(!panelTemplate.empty()){
+      var color = options.nodeColor && panelTemplate.datum() ? applyColorScale(colorScale,panelTemplate.datum()[options.nodeColor]) : options.defaultColor;
+      if(panelTemplate.classed("mode-1")){
+        panelTemplate.style("background-color",color);
+      }else if(panelTemplate.classed("mode-2")){
+        panelTemplate.select(".panel-template > h2").style("background-color",color);
+      }
+    }
+
     if(descriptionPanel && frequencyBars && options.frequencies){
       frequencyBars
-            .nodes(data)
+            .nodes(orderedData)
             .nodeColor(options.nodeColor)
             .colorScale(colorScale);
       content.classed("hide-description",false);
@@ -601,27 +768,13 @@ function gallery(Graph){
       }
       return scale(value);
     }
-
-    function itemWidth(item,ratio){
-      var wrapperBorderWidth = 0;
-      ["left","right"].forEach(function(d){
-        wrapperBorderWidth += parseInt(item.select(".img-wrapper").style("border-"+d+"-width"));
-      })
-      item.style("width",((currentGridHeight*ratio) + wrapperBorderWidth)+"px");
-    }
-
-    function imgMarginLeft(img,ratio){
-        var ml = (100 - (100/options.aspectRatio*ratio)) / 2;
-        d3.select(img).style("margin-left",ml+"%");
-    }
   }
 
-  function getImgRatio(img){
-      var ratio = 1;
-      if(img.complete && img.naturalHeight!==0){
-        ratio = img.naturalWidth / img.naturalHeight;
-      }
-      return ratio;
+  function selectAllItems(){
+    (itemsFiltered ? itemsFiltered : nodes).forEach(function(n){
+        n.selected = true;
+    });
+    displayGraph();
   }
 
   function deselectAllItems(){
@@ -630,6 +783,7 @@ function gallery(Graph){
     if(descriptionPanel && options.description && !options.frequencies){
       displayInDescription();
     }
+    body.selectAll(".tooltip").remove();
   }
 
   function filterSelection(){
@@ -639,15 +793,9 @@ function gallery(Graph){
         .map(function(n){
           return n[options.nodeName];
         });
-      if(!values.length){
-        topFilterInst.removeFilter();
-      }else{
+      if(values.length){
         topFilterInst.newFilter(options.nodeName,values);
       }
-  }
-
-  function filterNodes(n){
-      return !filter || filter.indexOf(n[options.nodeName])!=-1 ? true : false;
   }
 
   function getSelectOptions(order){
@@ -694,8 +842,7 @@ function gallery(Graph){
   }
 
   function displayLegend(){
-    var parent,
-        value,
+    var value,
         type,
         data,
         scale,
@@ -715,6 +862,7 @@ function gallery(Graph){
 
       displayShowPanelButton(parent,function(){
         parent.classed("hide-legend",false);
+        contentHeight(parent);
       })
 
       // ordinal scale
@@ -758,7 +906,7 @@ function gallery(Graph){
             .append("div").attr("class","legend")
         }
 
-        legends.select(".goback").style("display", filterHandler.getFilteredNames()===false ? "none" : null)
+        legends.select(".goback").style("display", itemsFiltered===false ? "none" : null)
 
         var content = legends.select(".legends-content");
         var legend = legends.select(".legend");
@@ -833,8 +981,7 @@ function gallery(Graph){
           return false;
         })
 
-        var legendsHeight = parent.node().parentNode.offsetHeight-250;
-        content.style("height",legend.node().offsetHeight>legendsHeight ? legendsHeight+"px" : null)
+        contentHeight(parent);
 
         if(initialize){
           var legendBottomControls = legends.append("div")
@@ -882,15 +1029,27 @@ function gallery(Graph){
       // linear scale
       if(scale.name=="h"){
         parent.select("div.legends").remove();
-        
-        displayLinearScale(parent,
+        parent.select("div.linear-scale").remove();
+        displayLinearScale(parent.append("div").attr("class","linear-scale"),
           value,
           scale.range(),
           scale.domain(),
           scalePicker,
           selectionWindow,
-          function(){ parent.classed("hide-legend",true); }
+          function(){ parent.classed("hide-legend",true); },
+          function(d){
+            scale.domain(d);
+            displayGraph();
+          }
         );
+      }
+    }
+    
+    function contentHeight(parent){
+      if(!parent.classed("hide-legend")){
+        var legends = parent.select(".legends");
+        var legendsHeight = parent.node().parentNode.offsetHeight-250;
+        legends.select(".legends-content").style("height",legends.select(".legend").node().offsetHeight>legendsHeight ? legendsHeight+"px" : null)
       }
     }
 
@@ -979,24 +1138,174 @@ function gallery(Graph){
     });
   }
 
-  function nodes2xlsx(){
-      var opt = getSelectOptions(),
-          data = nodes.filter(filterNodes).map(function(d){
-            return opt.map(function(dd){
-                     var txt = d[dd];
-                     if(txt == null){
-                       return "";
-                     }
-                     if(typeof txt == 'number'){
-                       return formatter(txt);
-                     }
-                     return String(txt);
-                   });
+  function displayTable(){
+    if(!body.select("body > .tables").empty()){
+      alert("Tables are already displayed");
+      return;
+    }
+
+    body.classed("maximize-table",true);
+
+    var tables = body.append("div")
+            .attr("class","tables")
+            .style("height",(docSize.height-20)+"px")
+
+    var header = tables.append("div")
+            .attr("class","table-header")
+
+    header.append("div")
+            .attr("class","close-button")
+            .on("click",closeTable)
+
+    var onlySelectedData = header.append("div")
+      .attr("class","only-selected-data")
+      .on("click",function(){
+        onlySelectedCheck.classed("checked",!onlySelectedCheck.classed("checked"));
+        tableInst.onlySelectedData(onlySelectedCheck.classed("checked"));
+        tables.call(tableInst);
+      })
+    onlySelectedData.append("span")
+        .text(texts.showonlyselecteditems+" ")
+    var onlySelectedCheck = onlySelectedData.append("div")
+        .attr("class","legend-check-box")
+
+    header = header.append("div")
+          .attr("class","inline-elements")
+
+    header.append("div")
+          .attr("class","table-title");
+
+    if(options.showExport2){
+      header.call(iconButton()
+            .alt("xlsx")
+            .float("none")
+            .src(b64Icons.xlsx)
+            .title(texts.downloadtable)
+            .job(tables2xlsx))
+            .select("img")
+              .style("margin-right","24px")
+              .style("margin-bottom","-2px")
+    }
+
+    header.append("input")
+      .attr("type", "text")
+      .attr("placeholder",texts.searchintable)
+      .on("keyup",function(){
+        var txt = d3.select(this).property("value");
+        if(txt.length>1){
+          txt = new RegExp(txt,'i');
+          var columns = tableInst.columns();
+          tableInst.data().forEach(function(node){
+            delete node.selected;
+            var i = 0;
+            while(!node.selected && i<columns.length){
+              if(String(node[columns[i++]]).match(txt))
+                node.selected = true;
+            }
           });
-      data.unshift(opt);
-      if(data.length != 0){
-        downloadExcel({items: data}, d3.select("head>title").text());
+          onlySelectedCheck.classed("checked",true);
+          tableInst.onlySelectedData(true);
+          tables.call(tableInst);
+          displayGraph();
+        }
+      })
+
+    header.append("button")
+            .attr("class","primary tableselection disabled")
+            .text(texts.tableselection)
+            .on("click",function(){
+              selectFromTable();
+              onlySelectedCheck.classed("checked",true);
+              tableInst.onlySelectedData(true);
+              tables.call(tableInst);
+
+              displayGraph();
+            })
+            .attr("title","ctrl + o")
+
+    header.append("button")
+            .attr("class","primary tablefilter disabled")
+            .text(texts.filter)
+            .on("click",function(){
+              selectFromTable();
+              filterSelection();
+              tableInst.data(itemsFiltered ? itemsFiltered : nodes);
+              tables.call(tableInst);
+              clearButton.classed("disabled",!itemsFiltered);
+            })
+
+    var clearButton = header.append("button")
+      .attr("class","primary-outline clear disabled")
+      .text(texts.clear)
+      .on("click", function(){
+        topFilterInst.removeFilter();
+        tableInst.data(nodes);
+        tables.call(tableInst);
+        clearButton.classed("disabled",true);
+      });
+
+    var table = tables.append("div")
+            .attr("class","table-container")
+
+    var tableInst = tableWrapper()
+            .data(itemsFiltered ? itemsFiltered : nodes)
+            .onlySelectedData(false)
+            .columns(getSelectOptions())
+            .update(function(){
+              tables.selectAll("button.primary.tableselection, button.primary.tablefilter")
+                .classed("disabled",tables.selectAll("tr.selected").empty());
+            })
+
+    tables.call(tableInst);
+    clearButton.classed("disabled",!itemsFiltered);
+
+    function closeTable(){
+      body.classed("maximize-table",false);
+      tables.remove();
+    }
+
+    function tables2xlsx(){
+      var columns = tableInst.columns(),
+          items = [columns];
+
+      tableInst.data().forEach(function(d){
+        if(!tableInst.onlySelectedData() || d.selected){
+          items.push(columns.map(function(col){ return tableInst.renderCell()(d,col); }));
+        }
+      })
+
+      if(items.length == 1){
+        displayWindow()
+            .append("p")
+              .attr("class","window-message")
+              .text(texts.noitemsselected);
+      }else{
+        downloadExcel({elements: items}, d3.select("head>title").text());
       }
+    }
+
+    function selectFromTable(){
+      var names = [],
+          index = 0,
+          table = tables.select("table"),
+          trSelected = table.selectAll("tr.selected");
+      if(!trSelected.empty()){
+            table.selectAll("th").each(function(d,i){
+              if(this.textContent == options.nodeName)
+                index = i+1;
+            })
+
+            trSelected
+              .each(function(){
+                names.push(d3.select(this).select("td:nth-child("+index+")").text());
+              })
+              .classed("selected",false);
+
+            nodes.forEach(function(d){
+              d.selected = names.indexOf(d[options.nodeName]) != -1;
+            });
+      }
+    }
   }
 } // gallery function end
 

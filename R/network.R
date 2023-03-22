@@ -109,18 +109,24 @@ imgWrapper <- function(net,callback,dir){
       net$options[["imageItems"]] <- paste0(net$options[["imageItems"]],"_url")
       for(i in seq_along(net$options[["imageItems"]])){
         net$nodes[[net$options[["imageItems"]][i]]] <- net$nodes[[net$options[["imageNames"]][i]]]
-        net$nodes[[net$options[["imageNames"]][i]]] <- sub("\\.[a-zA-Z0-9]+$","",basename(as.character(net$nodes[[net$options[["imageNames"]][i]]])))
+        net$nodes[[net$options[["imageNames"]][i]]] <- vapply(strsplit(as.character(net$nodes[[net$options[["imageNames"]][i]]]),"|",TRUE), function(x){
+          paste0(sapply(x, function(y){
+            sub("\\.[a-zA-Z0-9]+$","",basename(y))
+          }),collapse="|")
+        },character(1))
       }
     }
     for(img in net$options[["imageItems"]]){
-      net$nodes[[img]] <- vapply(as.character(net$nodes[[img]]),function(filepath){
-        rawname <- getRawName(filepath)
-        if(file.exists(filepath)){
-          file.copy(filepath, paste(imgDir,rawname,sep="/"), overwrite = FALSE)
-        }else{
-          warning("missing image file (",filepath,")")
-        }
-        paste("images",rawname,sep="/")
+      net$nodes[[img]] <- vapply(strsplit(as.character(net$nodes[[img]]),"|",TRUE),function(x){
+        paste0(sapply(x, function(filepath){
+          rawname <- getRawName(filepath)
+          if(file.exists(filepath)){
+            file.copy(filepath, paste(imgDir,rawname,sep="/"), overwrite = FALSE)
+          }else{
+            warning("missing image file (",filepath,")")
+          }
+          paste("images",rawname,sep="/")
+        }),collapse="|")
       },character(1))
     }
   }
@@ -141,16 +147,16 @@ netCreate <- function(net, dir){
   #get language
   language <- getLanguageScript(net)
 
-  createHTML(dir, c("reset.css","styles.css"), c("d3.min.js","jspdf.min.js","jszip.min.js","iro.min.js","functions.js",language,"colorScales.js","network.js"),function(){ return(imgWrapper(net,networkJSON,dir)) })
+  createHTML(dir, c("reset.css","styles.css"), c("d3.min.js","jspdf.min.js","jszip.min.js","iro.min.js","images.js","colorScales.js","functions.js",language,"network.js"),function(){ return(imgWrapper(net,networkJSON,dir)) })
 }
 
 # network graph function 
 network_rd3 <- function(nodes = NULL, links = NULL, tree = NULL,
         community = NULL, layout = NULL,
-        name = NULL, label = NULL, group = NULL, labelSize = NULL,
-        size = NULL, color = NULL, shape = NULL, legend = NULL,
-        sort = NULL, decreasing = FALSE, ntext = NULL, info = NULL,
-        image = NULL, imageNames = NULL,
+        name = NULL, label = NULL, group = NULL, groupText = FALSE,
+        labelSize = NULL, size = NULL, color = NULL, shape = NULL,
+        border = NULL, legend = NULL, sort = NULL, decreasing = FALSE,
+        ntext = NULL, info = NULL, image = NULL, imageNames = NULL,
         nodeBipolar = FALSE, nodeFilter = NULL, degreeFilter = NULL,
         source = NULL, target = NULL,
         lwidth = NULL, lweight = NULL, lcolor = NULL, ltext = NULL,
@@ -160,11 +166,19 @@ network_rd3 <- function(nodes = NULL, links = NULL, tree = NULL,
         main = NULL, note = NULL, showCoordinates = FALSE, showArrows = FALSE,
         showLegend = TRUE, frequencies = FALSE, showAxes = FALSE,
         axesLabels = NULL, scenarios = NULL, help = NULL, helpOn = FALSE,
-        mode = c("network","heatmap"), controls = 1:4, cex = 1,
-        background = NULL, defaultColor = "#1f77b4",
+        mode = c("network","heatmap"), roundedItems = FALSE, controls = 1:4,
+        cex = 1, background = NULL, defaultColor = "#1f77b4",
         language = c("en","es","ca"), dir = NULL)
 {
-  if(is.null(links) &&  is.null(nodes)){
+  if(length(nodes) && !nrow(nodes)){
+    nodes <- NULL
+    warning("The nodes data frame is empty")
+  }
+  if(length(links) && !nrow(links)){
+    links <- NULL
+    warning("The links data frame is empty")
+  }
+  if(is.null(links) && is.null(nodes)){
     stop("You must explicit a nodes or links data frame.")
   }
 
@@ -266,6 +280,7 @@ network_rd3 <- function(nodes = NULL, links = NULL, tree = NULL,
   }
   
   options[["language"]] <- checkLanguage(language)
+  options[["defaultColor"]] <- check_defaultColor(defaultColor)
 
   if(is.null(help) && options[["language"]]=="es"){
     options[["help"]] <- paste0(scan(file = paste(wwwDirectory(), "help_es.html", sep = "/"), what = character(0), sep = "\n", quiet = TRUE),collapse="")
@@ -275,13 +290,6 @@ network_rd3 <- function(nodes = NULL, links = NULL, tree = NULL,
   options <- showSomething(options,"linkBipolar",linkBipolar)
   options <- showSomething(options,"helpOn",helpOn)
   options <- showSomething(options,"frequencies",frequencies)
-  if(!is.null(defaultColor)){
-    if(isColor(defaultColor)){
-      options[["defaultColor"]] <- col2hex(defaultColor)
-    }else{
-      warning("defaultColor: you must pass a valid color")
-    }
-  }
   if (!is.null(controls)) options[["controls"]] <- as.numeric(controls)
   if (!is.null(mode)) options[["mode"]] <- tolower(substr(as.character(mode),1,1))
   if (!is.null(axesLabels)) options[["axesLabels"]] <- as.character(axesLabels)
@@ -292,6 +300,7 @@ network_rd3 <- function(nodes = NULL, links = NULL, tree = NULL,
   options <- showSomething(options,"showArrows",showArrows)
   options <- showSomething(options,"showLegend",showLegend)
   options <- showSomething(options,"showAxes",showAxes)
+  options <- showSomething(options,"roundedItems",roundedItems)
 
   # node options
   if(is.null(label)){
@@ -301,6 +310,7 @@ network_rd3 <- function(nodes = NULL, links = NULL, tree = NULL,
   }
   options <- checkColumn(options,"nodeLabelSize",labelSize)
   options <- checkColumn(options,"nodeGroup",group)
+  options <- showSomething(options,"groupText",groupText)
   if(is.numeric(size)){
     options[["defaultNodeSize"]] <- size
   }else{
@@ -311,6 +321,7 @@ network_rd3 <- function(nodes = NULL, links = NULL, tree = NULL,
   options <- checkColumn(options,"nodeInfo",info)
   options <- checkColumn(options,"nodeOrder",sort)
   options <- showSomething(options,"decreasing",decreasing)
+  options <- checkColumn(options,"nodeBorder",border)
 
   if (!is.null(image)){
     if(length(setdiff(image,colnames(nodes)))){

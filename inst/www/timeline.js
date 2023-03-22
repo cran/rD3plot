@@ -7,7 +7,7 @@ function timeline(json){
       symbolTypes = ["Circle","Square","Diamond","Triangle","Cross","Star","Wye"], // list of available shapes
       infoLeft = 0, // global variable for panel left position
       selectedGroups, // temporarily selected in checkboxes
-      filter = false; // global filter
+      itemsFiltered = false; // global filter
 
   var renderTime = function(t){
     return formatter(t);
@@ -84,6 +84,9 @@ function timeline(json){
 
   // top bar
   var topBar = displayTopBar().fixed(true);
+  if(options.multipages){
+    topBar.goback(true);
+  }
   body.call(topBar);
 
   topBar.addIcon(iconButton()
@@ -122,7 +125,6 @@ function timeline(json){
   var topFilterInst = topFilter()
     .data(periods)
     .datanames(getOptions(periods))
-    .attr(options.name)
     .displayGraph(displayGraph);
 
   topBar.addBox(topFilterInst);
@@ -184,7 +186,7 @@ function timeline(json){
   function displayGraph(newfilter){
 
     if(typeof newfilter != "undefined")
-      filter = newfilter;
+      itemsFiltered = newfilter;
 
     var plot = body.select("div.plot")
 
@@ -206,7 +208,7 @@ function timeline(json){
           return y === null ? currentTime : y;
         };
 
-    var items = (filter ? periods.filter(function(d){ return filter.indexOf(d[options.name])!=-1; }) : periods).filter(function(d){ return d[options.group]!==null; });
+    var items = (itemsFiltered ? itemsFiltered : periods).filter(function(d){ return d[options.group]!==null; });
 
     var lanes = options.group?d3.set(items.map(function(d){ return String(d[options.group]); })).values().sort(sortAsc):[""],
         laneLength = lanes.length,
@@ -382,7 +384,7 @@ function timeline(json){
 
     var gLaneTexts = mini.append("g");
 
-    var showCheckControls = !filter && laneLength>1;
+    var showCheckControls = !itemsFiltered && laneLength>1;
 
     headerButtons.selectAll("*").remove();
 
@@ -391,7 +393,7 @@ function timeline(json){
       enableFilterButton(false);
 
       displaySeparator(mini,margin[3],y);
-    }else if(filter){
+    }else if(itemsFiltered){
       headerButtons.append("div").html("&nbsp;")
       headerButtons.append("div")
         .attr("class","goback")
@@ -743,7 +745,7 @@ function timeline(json){
 
           rectsEnter.selectAll("rect, text").on("click.infopanel",function(d){ infoPanel.changeInfo(d[options.info]); });
 
-          tooltipActions(rectsEnter.selectAll("rect, text"),options.text);
+          tooltipActions(rectsEnter.selectAll("rect, text"),options.text,color(d));
 
           rects.exit().remove();
 
@@ -835,7 +837,7 @@ function timeline(json){
           rectsUpdate.attr("transform",function(d){
             var BBox = this.getBBox(),
                 i = 0,
-                nlines = Math.ceil(BBox.height/lineheight)+(d['_events_']?1:0);
+                nlines = Math.ceil(BBox.height/lineheight);
                 j = 0,
                 collision = true;
             while(collision){
@@ -875,7 +877,7 @@ function timeline(json){
     }
   }
 
-  function tooltipActions(sel,text){
+  function tooltipActions(sel,text,color){
     sel
       .on("click.tooltip",function(d){
         d3.event.stopPropagation();
@@ -936,15 +938,32 @@ function timeline(json){
         }else if(typeof text == 'function'){
           html = text(d);
         }
-        if(html)
+        if(html){
           tip.style("display","block").html(html);
+          if(color){
+            tooltip.select(".tooltip > .info-template > h2.auto-color").style("background-color",color);
+          }
+        }
     }
 
     function tooltipCoords(tip){
-        var coor = [0, 0];
-        coor = d3.mouse(body.node());
-        tip.style("top",(coor[1]+20)+"px")
-           .style("left",(coor[0]+20)+"px")
+        var coor = d3.mouse(document.body),
+            bodyrect = document.body.getBoundingClientRect(),
+            width = bodyrect.width,
+            top = window.scrollY + bodyrect.top + coor[1],
+            left = coor[0];
+        if(left > width/2){
+          left = left - tip.node().offsetWidth - 20;
+        }else{
+          left = left + 20;
+        }
+        top = top + 20;
+        var offsetY = (top + tip.node().offsetHeight) - (window.scrollY + bodyrect.bottom);
+        if(offsetY > 0){
+          top = top - offsetY;
+        }
+        tip.style("top",top+"px")
+           .style("left",left+"px")
     }
   }
 

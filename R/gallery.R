@@ -4,25 +4,36 @@ galleryJSON <- function(gallery){
     nodenames = array(colnames(gallery$nodes)),
     options = gallery$options
   )
+
+  #prepare tree
+  if(length(gallery$tree)){
+    json$tree <- unname(as.list(gallery$tree))
+  }
+
   return(toJSON(json))
 }
 
 galleryCreate <- function(gallery, dir){
   language <- getLanguageScript(gallery)
-  scripts <- c("d3.min.js","jspdf.min.js","jszip.min.js","html2canvas.min.js","functions.js",language,"colorScales.js","gallery.js")
+  styles <- c("reset.css","styles.css")
+  scripts <- c("d3.min.js","jspdf.min.js","jszip.min.js","html2canvas.min.js","images.js","colorScales.js","functions.js",language,"gallery.js")
   if(!is.null(gallery$options$frequencies)){
     scripts <- c(scripts,"d3.layout.cloud.js")
   }
-  createHTML(dir, c("reset.css","styles.css"), scripts, function(){ return(imgWrapper(gallery,galleryJSON,dir)) })
+  if(!is.null(gallery$options$tutorial) && !identical(as.logical(gallery$options$tutorial),FALSE)){
+    scripts <- c(scripts,"tutorial.js",paste0("tutorial_",language))
+    styles <- c(styles,"tutorial.css")
+  }
+  createHTML(dir, styles, scripts, function(){ return(imgWrapper(gallery,galleryJSON,dir)) })
 }
 
-gallery_rd3 <- function(nodes, name = NULL, label = NULL, color = NULL,
-    ntext = NULL, info = NULL, image = NULL, zoom = 1,
-    itemsPerRow = NULL, main = NULL, note = NULL,
+gallery_rd3 <- function(nodes, tree = NULL, name = NULL, label = NULL, color = NULL,
+    border = NULL, ntext = NULL, info = NULL, infoFrame = c("right","left"),
+    image = NULL, zoom = 1, itemsPerRow = NULL, main = NULL, note = NULL,
     showLegend = TRUE, frequencies = FALSE,
-    help = NULL, helpOn = FALSE, description = NULL,
-    descriptionWidth = NULL, roundedItems = FALSE, controls = 1:2,
-    cex = 1, language = c("en", "es", "ca"), dir = NULL){
+    help = NULL, helpOn = FALSE, tutorial = FALSE, description = NULL,
+    descriptionWidth = NULL, roundedItems = FALSE, controls = 1:5, cex = 1,
+    defaultColor = "#1f77b4", language = c("en", "es", "ca"), dir = NULL){
   if(is.null(name)){
     name <- colnames(nodes)[1]
   }
@@ -35,8 +46,16 @@ gallery_rd3 <- function(nodes, name = NULL, label = NULL, color = NULL,
   }else{
     options <- checkColumn(options,"nodeLabel",label)
   }
+  options <- checkColumn(options,"nodeBorder",border)
   options <- checkColumn(options,"nodeText",ntext)
   options <- checkColumn(options,"nodeInfo",info)
+
+  if(is.character(infoFrame) && (infoFrame[1] %in% c("right","left"))){
+    options[["infoFrame"]] <- infoFrame[1]
+    if(options[["infoFrame"]]=="left" && is.null(description)){
+      warning("infoFrame: you must add a description to use the left panel")
+    }
+  }
 
   if(!(is.numeric(zoom) && zoom>=0.1 && zoom<=10)){
     zoom <- formals(gallery_rd3)[["zoom"]]
@@ -65,15 +84,13 @@ gallery_rd3 <- function(nodes, name = NULL, label = NULL, color = NULL,
   options <- showSomething(options,"roundedItems",roundedItems)
   options <- showSomething(options,"showLegend",showLegend)
   options <- showSomething(options,"helpOn",helpOn)
+  options <- showSomething(options,"tutorial",tutorial)
   options <- showSomething(options,"frequencies",frequencies)
 
   if (!is.null(controls)) options[["controls"]] <- as.numeric(controls)
-  if(!is.numeric(cex)){
-    cex <- formals(gallery_rd3)[["cex"]]
-    warning("cex: must be numeric")
-  }
   options[["cex"]] <- check_cex(cex)
   options[["language"]] <- checkLanguage(language)
+  options[["defaultColor"]] <- check_defaultColor(defaultColor)
 
   if (!is.null(image)){
     image <- image[1]
@@ -89,8 +106,46 @@ gallery_rd3 <- function(nodes, name = NULL, label = NULL, color = NULL,
 
   # more options
   gallery <- checkItemValue(gallery,"nodes","nodeColor",color,"color",isColor,categoryColors,col2hex)
+  
+    #check tree
+  if(!is.null(tree)){
+    tree <- tree[tree[,1] %in% nodes[[name]] & tree[,2] %in% nodes[[name]] & as.character(tree[,2])!=as.character(tree[,1]),]
+    if(nrow(tree)==0){
+      warning("tree: no row (Source and Target) matches the name column of the nodes")
+    #}else if(sum(duplicated(as.character(tree[,2])))){
+    #  warning("tree: there must be only one parent per node")
+    }else{
+      gallery$tree <- data.frame(Source=tree[,1],Target=tree[,2])
+    }
+  }
 
   if (!is.null(dir)) galleryCreate(gallery,dir)
   return(gallery)
 }
 
+add_tutorial_rd3 <- function(x, image=NULL, description=NULL){
+  if(!inherits(x,"gallery_rd3")){
+    stop("x: a gallery must be provided")
+  }
+
+  x$options$tutorial <- list()
+  if(!is.null(image) && is.character(image) && file.exists(image)){
+    mime <- c("image/jpeg","image/jpeg","image/png","image/svg","image/gif")
+    names(mime) <- c("jpeg","jpg","png","svg","gif")
+    imgname <- sub("^.*/","",image)
+    extension <- sub("^.*\\.","",imgname)
+    if(extension %in% names(mime)){
+      src <- paste0("data:",mime[extension],";base64,",base64encode(image))
+      x$options$tutorial$image <- src
+    }else{
+      warning("image: image format not supported")
+    }
+  }
+  if(!is.null(description) && is.character(description)){
+    x$options$tutorial$description <- description
+  }
+  if(!length(x$options$tutorial)){
+    x$options$tutorial <- TRUE
+  }
+  return(x)
+}

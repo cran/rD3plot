@@ -84,6 +84,9 @@ window.onload = function(){
     case 'gallery':
       gallery(json);
       break;
+    case 'pie':
+      piechart(json);
+      break;
     case 'iFrame':
       displayIframe(json);
       break;
@@ -111,4 +114,5 @@ function displayIframe(url){
     .attr("marginwidth",0)
     .attr("marginheight",0)
 }
+
 
