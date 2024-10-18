@@ -107,6 +107,7 @@ var texts = {
     speed: "Velocidad",
     searchintable: "Busca en la tabla",
     goback: "Volver",
+    home: "Home",
     newtab: "Abrir en nueva pestaña",
     tools: "Herramientas",
     poweredby: "Hecho con",
@@ -123,5 +124,8 @@ var texts = {
     showonlyselecteditems: "Mostrar solo items seleccionados",
     Variable: "Variable",
     Value: "Valor",
-    highlightneighbors: "Resaltar vecinos"
+    highlightneighbors: "Resaltar vecinos",
+    clearfilters: "Limpiar filtros",
+    close: "Cerrar",
+    filtermenu: "Menu de filtros"
   };

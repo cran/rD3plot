@@ -294,13 +294,16 @@ function brushSlider(){
   var domain,
       current,
       callback,
-      ordinal = false;
+      ordinal = false,
+      mode = 1;
 
   function exports(sel){
+    sel.selectAll(".slider").remove();
+
     var cex = parseInt(sel.style("font-size"))/10,
-        margin = {top: 21 + 15*cex, right: 40, bottom: 0, left: 10},
-        width = sel.node().clientWidth - margin.left - margin.right,
-        height = 21;
+        margin = mode==1 ? [21 + 15*cex, 40, 0, 10] : [0,0,0,0],
+        width = sel.node().clientWidth - margin[3] - margin[1],
+        height = mode==1 ? 21 : 0;
 
     if(!current)
       current = domain.slice();
@@ -310,33 +313,42 @@ function brushSlider(){
         .domain(domain)
         .clamp(true);
 
-    sel.style("height", height+margin.top+margin.bottom + "px");
+    sel.style("height", height+margin[0]+margin[2] + "px");
   
     var slider = sel.append("div")
-      .attr("class", "slider")
+      .attr("class", "slider mode"+mode)
       .style("width", width + "px")
       //.style("height", height + "px")
       .style("position", "relative")
-      .style("top", margin.top+"px")
-      .style("left", margin.left+"px");
+      .style("top", margin[0]+"px")
+      .style("left", margin[3]+"px");
     
     var sliderTray = slider.append("div")
       .attr("class", "slider-tray");
     
-    var sliderExtent = slider.append("span")
-      .attr("class","slider-extent")
+    var sliderExtent = false;
 
-    slider.append("span")
-    .attr("class","slider-min")
-    .style("left", -5*cex+"px")
-    .style("top", -20*cex + "px")
-    .text(formatter(domain[0]))
+    if(mode==1){
+      sliderExtent = slider.append("span")
+        .attr("class","slider-extent")
 
-    slider.append("span")
-    .attr("class","slider-max")
-    .style("left", width-5*cex+"px")
-    .style("top", -20*cex + "px")
-    .text(formatter(domain[1]))
+      slider.append("span")
+      .attr("class","slider-min")
+      .style("left", -5*cex+"px")
+      .style("top", -20*cex + "px")
+      .text(formatter(domain[0]))
+
+      slider.append("span")
+      .attr("class","slider-max")
+      .style("left", width-5*cex+"px")
+      .style("top", -20*cex + "px")
+      .text(formatter(domain[1]))
+    }
+
+    if(mode==2){
+      sliderExtent = sliderTray.append("span")
+        .attr("class","slider-extent")
+    }
 
     var sliderHandle = slider.selectAll(".slider-handle")
     .data(current)
@@ -399,9 +411,11 @@ function brushSlider(){
       sliderHandle.style("left",function(d){ return x(d) + "px"; });
       sliderHandle.select(".slider-text").text(function(d){ return formatter(d); });
       var extent = d3.extent(current);
-      sliderExtent
+      if(sliderExtent){
+        sliderExtent
         .style("width", (x(extent[1])-x(extent[0]))+"px")
         .style("left",x(extent[0])+"px");
+      }
       return extent;
     }
   }
@@ -431,6 +445,12 @@ function brushSlider(){
   exports.ordinal = function(x) {
     if (!arguments.length) return ordinal;
     ordinal = x ? true : false;
+    return exports;
+  };
+
+  exports.mode = function(x) {
+    if (!arguments.length) return mode;
+    mode = x;
     return exports;
   };
 
@@ -747,26 +767,17 @@ function topFilter(){
       .append("select")
         .on("change",function(){ changeAttrSel(this.value); })
 
-    var options = datanames.slice();
-    options.unshift("-"+texts.none+"-");
-    selFilter.selectAll("option")
-        .data(options)
-      .enter().append("option")
-        .property("disabled",function(d,i){ return !i; })
-        .property("value",String)
-        .text(String)
+    updateSelect();
 
-    var topbar = d3.select(div.node().parentNode.parentNode);
-    if(topbar.classed("topbar")){
-      filterTags = topbar.append("div").attr("class","filter-tags");
-    }
+    renderFilterTagsContainer(d3.select(div.node().parentNode.parentNode));
   }
 
   function displayTags(){
     if(filterTags){
-      var tags = filterTags.selectAll(".tag").data(d3.keys(selectedValues),String)
+      var tags = filterTags.selectAll(".tag").data(d3.keys(selectedValues).filter(function(d){ return d.substring(0,1)!="_" }),String)
       tags.enter().append("div")
         .attr("class","tag")
+        .attr("filter",String)
         .text(String)
         .on("click",function(d){
             delete selectedValues[d];
@@ -779,7 +790,21 @@ function topFilter(){
     }
   }
 
-  function getFilteredData(){
+  function updateSelect(){
+      if(selFilter){
+        selFilter.selectAll("option").remove();
+        var options = datanames.slice();
+        options.unshift("-"+texts.none+"-");
+        selFilter.selectAll("option")
+        .data(options)
+          .enter().append("option")
+        .property("disabled",function(d,i){ return !i; })
+        .property("value",String)
+        .text(String)
+      }
+  }
+
+  function getFilteredData(additive){
     var keys = d3.keys(selectedValues);
     if(keys.length){
       return data.filter(function(d){
@@ -811,13 +836,25 @@ function topFilter(){
               value = true;
             }
           }
-          if(!value){
-            d._filtered = true;
-            return false;
+          if(!additive){
+            if(!value){
+              d._filtered = true;
+              return false;
+            }
+          }else{
+            if(value){
+              delete d._filtered;
+              return true;
+            }
           }
         }
-        delete d._filtered;
-        return true;
+        if(additive){
+          d._filtered = true;
+          return false;
+        }else{
+          delete d._filtered;
+          return true;
+        }
       });
     }else{
       data.forEach(function(d){
@@ -825,6 +862,16 @@ function topFilter(){
       });
     }
     return false;
+  }
+
+  function renderFilterTagsContainer(topbar){
+    if(!filterTags && topbar.classed("topbar")){
+      filterTags = topbar.append("div").attr("class","filter-tags");
+    }
+  }
+
+  exports.filterTagsTopbar = function(topbar){
+    renderFilterTagsContainer(topbar);
   }
 
   exports.removeFilter = function(){
@@ -843,6 +890,7 @@ function topFilter(){
   exports.datanames = function(x) {
     if (!arguments.length) return datanames;
     datanames = x;
+    updateSelect();
     return exports;
   };
 
@@ -869,6 +917,37 @@ function topFilter(){
     displayTags();
   }
 
+  exports.getFilter = function(key){
+    if(key){
+      if(selectedValues[key]){
+        return selectedValues[key];
+      }
+    }
+    return [];
+  }
+
+  exports.storeFilter = function(key,values){
+    if(key){
+      selectedValues[key] = values;
+    }
+  }
+
+  exports.storeNumericFilter = function(key,min,max){
+    if(key){
+      selectedValues[key] = [];
+      data.forEach(function(d){
+        if((d[key] >= min) && (d[key] <= max )){
+          selectedValues[key].push(d[key]);
+        }
+      });
+    }
+  }
+
+  exports.applyFilter = function(additive){
+    displayGraph(getFilteredData(additive));
+    displayTags();
+  }
+
   return exports;
 }
 
@@ -877,16 +956,16 @@ function sortAsc(a,b){
 }
 
 function compareFunction(a,b,rev){
-  if(rev){
-    var aux = b;
-    b = a;
-    a = aux;
-  }
   if(a===null){
     return 1;
   }
   if(b===null){
     return -1;
+  }
+  if(rev){
+    var aux = b;
+    b = a;
+    a = aux;
   }
   if(!isNaN(+a) && !isNaN(+b)){
     a = +a;
@@ -1137,7 +1216,8 @@ function displayMultiSearch(){
   var data = [],
       column = "name",
       updateSelection = function(){},
-      updateFilter = function(){};
+      updateFilter = function(){},
+      help = true;
 
   function exports(sel){
 
@@ -1155,6 +1235,9 @@ function displayMultiSearch(){
 
     var searchBoxInput = searchBox.append("div")
       .attr("class","text-wrapper")
+      .on("click",function(){
+        searchBoxInput.node().focus();
+      })
       .append("div")
       .attr("class","text-content")
       .append("textarea")
@@ -1169,14 +1252,15 @@ function displayMultiSearch(){
           clearTimeout(typingTimer);
         })
         .on("keyup",function(){
+          d3.event.stopPropagation();
+        })
+        .on("keypress",function(){
           clearTimeout(typingTimer);
           if(getKey(d3.event)=="Enter"){
-            if(d3.event.shiftKey){
+            if(d3.event.shiftKey ^ !help){
               searchIcon.dispatch("click");
               this.blur();
               return;
-            }else{
-              d3.event.stopPropagation();
             }
           }
           if(["ArrowLeft","ArrowRight","ArrowDown","ArrowUp"].indexOf(getKey(d3.event))!=-1){
@@ -1186,7 +1270,9 @@ function displayMultiSearch(){
           typingTimer = setTimeout(doneTyping, typingInterval);
         })
 
-    searchBox.append("p").text("shift + Enter to filter")
+    if(help){
+      searchBox.append("p").text("shift + Enter to filter");
+    }
 
     var searchIcon = searchSel.append("button")
       .attr("class","search-icon disabled")
@@ -1194,6 +1280,7 @@ function displayMultiSearch(){
         .d(d4paths.search)
         .width(16).height(16))
       .on("click",function(){
+        doneTyping();
         updateFilter();
         checkContainer.selectAll("span").remove();
         searchIcon.classed("disabled",true);
@@ -1212,9 +1299,9 @@ function displayMultiSearch(){
 
             values.forEach(function(value){
             var found = false;
-              value = new RegExp(value,'i');
+              value = cleanString(value);
               data.forEach(function(node){
-                if(String(node[column]).match(value)){
+                if(cleanString(node[column]).match(value)){
                   node.selected = found = true;
                 }
               });
@@ -1225,6 +1312,10 @@ function displayMultiSearch(){
             updateSelection();
           }
           searchIcon.classed("disabled",!checkContainer.selectAll("span.yes").size());
+
+          function cleanString(value){
+            return String(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+          }
     }
   }
 
@@ -1249,6 +1340,12 @@ function displayMultiSearch(){
   exports.updateFilter = function(x) {
     if (!arguments.length) return updateFilter;
     updateFilter = x;
+    return exports;
+  };
+
+  exports.help = function(x) {
+    if (!arguments.length) return help;
+    help = x ? true : false;
     return exports;
   };
 
@@ -1344,9 +1441,22 @@ function stripTags(text){
   return text.replace(/(<([^>]+)>)/ig,"");
 }
 
-function displayLinearScale(sel,value,range,domain,selectScale,selectAttribute,closePanel,changeDomain){
-    var panel = sel.select(".scale");
-    domain = d3.extent(domain);
+function displayLinearScale(sel, value, range, domain, selectScale, selectAttribute, closePanel, changeDomain, simplify, slider){
+  domain = d3.extent(domain);
+  var panel;
+
+  if(simplify){
+    panel = sel.select(".scale-content");
+    if(panel.empty()){
+      panel = sel.append("div")
+        .attr("class","scale-content");
+
+      renderScaleGradient(panel);
+      renderDomain(panel,0);
+      renderDomain(panel,1);
+    }
+  }else{
+    panel = sel.select(".scale");
     if(panel.empty()){
       panel = sel.append("div")
           .attr("class","scale")
@@ -1360,20 +1470,9 @@ function displayLinearScale(sel,value,range,domain,selectScale,selectAttribute,c
               .on("click",closePanel)
       }
 
-      var paddingRight = 12;
-
-      if(selectScale){
-        panel.append("img")
-          .attr("width","24")
-          .attr("height","24")
-          .attr("src",b64Icons.edit)
-          .on("click",selectScale)
-        paddingRight += 30;
-      }
-
       var div = panel.append("div")
         .attr("class","scale-content")
-        .style("padding-right",paddingRight+"px");
+        .style("padding-right","12px");
 
       div.append("div")
           .attr("class","title")
@@ -1381,61 +1480,85 @@ function displayLinearScale(sel,value,range,domain,selectScale,selectAttribute,c
           .style("cursor", selectAttribute ? "pointer" : null)
           .on("click", selectAttribute ? selectAttribute : null);
 
-      div.append("div")
+      renderScaleGradient(div);
+      renderDomain(div,0);
+      renderDomain(div,1);
+    }
+  }
+
+  panel.select("div.legend-scale-gradient")
+      .datum(range)
+      .style("background-image",function(d){ return "linear-gradient(to right, " + d.join(", ") + ")"; })
+  panel.select(".domain1 > span").text(formatter(domain[0]));
+  panel.select(".domain2 > span").text(formatter(domain[1]));
+  if(slider){
+    var slidercontainer = panel.select(".slider-container");
+    slidercontainer.call(brushSlider()
+            .domain(domain)
+            .current(domain)
+            .callback(slider)
+            .mode(2))
+  }
+
+  function renderScaleGradient(div){
+      if(slider){
+        div.style("padding-top","12px")
+          .append("div").attr("class","slider-container");
+      }
+
+      var legendScaleGradient = div.append("div")
         .attr("class","legend-scale-gradient")
         .style("height","10px")
         .style("width","100%")
 
-      renderDomain(0);
-      renderDomain(1);
+      if(selectScale){
+        legendScaleGradient
+          .style("cursor","pointer")
+          .on("click",selectScale)
+      }
+  }
 
-      function renderDomain(i){
-            var container = document.createElement('div')
-            container.classList.add('domain'+(i+1))
+  function renderDomain(div,i){
+    var container = document.createElement('div')
+    container.classList.add('domain'+(i+1))
 
-            var span = document.createElement('span');
+    var span = document.createElement('span');
 
-            container.appendChild(span);
-            div.node().appendChild(container);
+    container.appendChild(span);
+    div.node().appendChild(container);
 
-            if(changeDomain){
-              var domInput = document.createElement('input');
-              domInput.style.width = "80%";
-              domInput.type = "text";
+    if(changeDomain){
+      var domInput = document.createElement('input');
+      domInput.style.width = "80%";
+      domInput.type = "text";
 
-              domInput.addEventListener("keydown",function(event){
-                if(this.parentNode && getKey(event)=="Enter"){
-                    domain[i] = +domInput.value;
-                    close(event);
-                    changeDomain(domain);
-                }
-              })
+      domInput.addEventListener("keydown",function(event){
+        if(this.parentNode && getKey(event)=="Enter"){
+            domain[i] = +domInput.value;
+            close(event);
+            changeDomain(domain);
+        }
+      })
 
-              domInput.addEventListener("blur",close)
+      domInput.addEventListener("blur",close)
 
-              span.addEventListener("click",function(){
-                event.preventDefault();
-                domInput.value = "";
-                span.parentNode.removeChild(span);
-                container.appendChild(domInput);
-                domInput.focus();
-              })
+      span.addEventListener("click",function(){
+        event.preventDefault();
+        domInput.value = "";
+        span.parentNode.removeChild(span);
+        container.appendChild(domInput);
+        domInput.focus();
+      })
 
-              function close(event){
-                event.preventDefault();
-                if(domInput.parentNode){
-                  domInput.parentNode.removeChild(domInput);
-                }
-                container.appendChild(span);
-              }
-            }
+      function close(event){
+        event.preventDefault();
+        if(domInput.parentNode){
+          domInput.parentNode.removeChild(domInput);
+        }
+        container.appendChild(span);
       }
     }
-    panel.select("div.legend-scale-gradient")
-      .datum(range)
-      .style("background-image",function(d){ return "linear-gradient(to right, " + d.join(", ") + ")"; })
-    panel.select(".domain1 > span").text(formatter(domain[0]));
-    panel.select(".domain2 > span").text(formatter(domain[1]));
+  }
 }
 
 function addGradient(defs,id,range){
@@ -2196,7 +2319,8 @@ function displayTopBar(){
       netCoin = true,
       fixed = false,
       title = false,
-      goback = false;
+      goback = false,
+      multigraph = false;
 
   function exports(sel){
     topbar = sel.append("div")
@@ -2212,14 +2336,14 @@ function displayTopBar(){
     if(goback){
       exports.addBox(function(box){
         box.append("button").attr("class","primary home").text(texts.goback).attr("title",texts.goback).on("click",function(){
-          window.location.href = "../../index.html";
+          window.history.back();
         })
       })
     }
 
-    if(typeof multiGraph != 'undefined'){
+    if(multigraph){
       exports.addBox(function(box){
-        multiGraph.graphSelect(box);
+        multiGraphSelect(box,multigraph.idx,multigraph.names);
       });
     }
 
@@ -2319,6 +2443,10 @@ function displayTopBar(){
     return exports;
   }
 
+  exports.topbar = function(){
+    return topbar;
+  }
+
   exports.height = function(){
     return topbar.node().offsetHeight;
   }
@@ -2332,6 +2460,12 @@ function displayTopBar(){
   exports.goback = function(x){
     if (!arguments.length) return goback;
     goback = x ? true : false;
+    return exports;
+  }
+
+  exports.multigraph = function(x){
+    if (!arguments.length) return multigraph;
+    multigraph = x;
     return exports;
   }
 
@@ -2794,10 +2928,37 @@ function tableWrapper(){
       pagination = false,
       pagelength = 25,
       paginationDiv,
-      columnwidths = [];
+      columnwidths = [],
+      id = false,
+      columnHidden;
 
   function exports(tables){
     tableContainer = tables.select("div.table-container");
+
+    tableContainer.on("wheel",function(){
+      var idx = d3.event.deltaY > 0 ? 3 : 2;
+      tables.select(".table-pagination > button:nth-child("+idx+")").node().click();
+    })
+
+    d3.select("body").on("keydown.table-pagination-shortcut",function(){
+      var key = getKey(d3.event);
+      switch(key){
+        case "PageUp":
+          d3.event.preventDefault();
+          var btn = tables.select(".table-pagination > button:nth-child(2)");
+          if(!btn.empty()){
+            btn.node().click();
+          }
+          return;
+        case "PageDown":
+          d3.event.preventDefault();
+          var btn = tables.select(".table-pagination > button:nth-child(3)");
+          if(!btn.empty()){
+            btn.node().click();
+          }
+          return;
+      }
+    })
 
     if(tableContainer.empty()){
       return;
@@ -2816,16 +2977,31 @@ function tableWrapper(){
           return false;
         });
 
+    columnHidden = columns.map(function(d){
+      if(d.substring(0,1)=="_"){
+        return true;
+      }
+      return false;
+    });
+
     var tableTitle = tables.select("div.table-title")
     tableTitle.selectAll("span").remove();
-    tableTitle.append("span").text(texts[item+"attributes"])
+    var text = texts[item+"attributes"];
+    if(!text){
+      text = texts["elementsattributes"];
+    }
+    tableTitle.append("span").text(text)
     if(onlySelectedData){
       tableTitle.append("span").text(" ("+selectedData.length+" "+texts.outof+" "+currentData.length+")")
     }
     tables.select(".table-pagination").remove();
     tableContainer.selectAll("table, p").remove();
     if(selectedData.length==0){
-      tableContainer.append("p").text(texts["no"+item+"selected"]);
+      var text = texts["no"+item+"selected"];
+      if(!text){
+        text = texts["noelementsselected"];
+      }
+      tableContainer.append("p").text(text);
     }else{
       var cellheight = parseInt(tables.style("line-height")) + 9;
       pagelength = Math.floor(tableContainer.node().offsetHeight / cellheight) - 2;
@@ -2884,7 +3060,13 @@ function tableWrapper(){
         .classed("selected",function(dd){
           return currentData[dd]._selected;
         });
+      if(id && columns.indexOf(id)!=-1){
+        tr.attr("rowname",d[id]);
+      }
       columns.forEach(function(col,i){
+          if(columnHidden[i]){
+            return false;
+          }
           var txt = renderCell(d,col);
           tr.append("td")
               .classed("text-right",rightAlign[i] ? true : false)
@@ -2936,6 +3118,9 @@ function tableWrapper(){
             desc0 = columns.map(function(){ return false; }),
             desc = desc0.slice();
         columns.forEach(function(d,i){
+          if(columnHidden[i]){
+            return false;
+          }
           var sort1 = function(a,b){
                 if(a[d]==null) return 1;
                 if(b[d]==null) return -1;
@@ -3032,6 +3217,12 @@ function tableWrapper(){
     return exports;
   }
 
+  exports.id = function(x){
+    if (!arguments.length) return id;
+    id = x;
+    return exports;
+  }
+
   return exports;
 }
 
@@ -3049,3 +3240,115 @@ function defaultColorManagement(defaultColor){
     return categoryColors[0];
 }
 
+function multiGraphSelect(sel,current,items){
+    if(typeof items == "string"){
+      items = [items];
+    }
+    sel = sel.append("div").attr("class","multi-select")
+    var select = sel.append("select")
+    select.selectAll("option")
+      .data(items)
+      .enter().append("option")
+        .property("value",function(d,i){ return i; })
+        .text(function(d){ return d; })
+        .each(function(d,i){
+          if(i==current){
+            this.selected = true; 
+          }
+        })
+    select.on("change",function(){ window.location.href = "../../index.html?"+this.value; })
+    sel.append("img")
+        .attr("src",b64Icons.menu)
+    sel.append("span")
+      .html(items[current])
+
+    d3.select("body").on("keydown.multishortcut",function(){
+      if((d3.event.ctrlKey || d3.event.metaKey) && d3.event.shiftKey){
+        var key = getKey(d3.event);
+        switch(key){
+          case "ArrowUp":
+          case "ArrowDown":
+            var idx = select.node().selectedIndex;
+            idx = (key=="ArrowUp"?idx-1:idx+1);
+            if(idx<0){
+              idx = items.length-1;
+            }
+            if(idx>=items.length){
+              idx = 0;
+            }
+            window.location.href = "../../index.html?"+idx;
+            return;
+        }
+      }
+    });
+}
+
+function tooltipTemplateAutoColor(tooltip,color){
+  var h2 = tooltip.select(".tooltip > .info-template > h2.auto-color");
+  if(!h2.empty()){
+    h2.style("background-color",color);
+    h2.style("color",d3.hsl(color).l > 0.75 ? basicColors.black : basicColors.white);
+  }
+}
+
+function panelTemplateAutoColor(body,getColor){
+    var panelTemplate = body.select(".panel-template.auto-color");
+    if(!panelTemplate.empty()){
+      var color = getColor(panelTemplate.datum());
+      var h2 = panelTemplate.select(".panel-template > h2");
+      if(panelTemplate.classed("mode-1")){
+        panelTemplate.style("background-color",color);
+      }else if(panelTemplate.classed("mode-2")){
+        h2.style("background-color",color);
+      }
+      h2.style("color",d3.hsl(color).l > 0.75 ? basicColors.black : basicColors.white);
+    }
+}
+
+function transposeNodes(Graphnodes,nodenames,options){
+  var splitMultiVariable = function(d){
+      for(var p in d) {
+        if(p!=options.nodeName && p!=options.nodeText && p!=options.nodeInfo){
+          if(typeof d[p] == "string" && d[p].indexOf("|")!=-1){
+            var aux = d[p].split("|");
+            d[p] = aux.map(function(d){ return d=="" ? null : (isNaN(parseInt(d)) ? d : +d); });
+          }
+        }
+      }
+  }
+
+  var nodes = [],
+      len = Graphnodes[0].length;
+  for(var i = 0; i<len; i++){
+      var node = {};
+      nodenames.forEach(function(d,j){
+        node[d] = Graphnodes[j][i];
+      })
+      splitMultiVariable(node);
+      node[options.nodeName] = String(node[options.nodeName]);
+      nodes.push(node);
+  }
+  return nodes;
+}
+
+function getSelectOptions(order,Graph,Tree){
+    return Graph.nodenames.filter(function(d){
+          if(d.substring(0,1)=="_"){
+            return false;
+          }
+          if(d==Graph.options.nodeName){
+            return true;
+          }
+          if(Graph.options.imageItems && d==Graph.options.imageItems){
+            return false;
+          }
+          if((d==Graph.options.nodeText || d==Graph.options.nodeInfo) && d!=Graph.options.nodeLabel){
+            return false;
+          }
+          if(Tree && Tree.typeFilter && Graph.options.nodeNamesByType && (!Graph.options.nodeNamesByType.hasOwnProperty(Tree.typeFilter) || Graph.options.nodeNamesByType[Tree.typeFilter].indexOf(d)==-1) && d!=Graph.options.nodeType){
+            return false;
+          }
+          return true;
+        })
+        .sort(order ? order : function(){ return 0; });
+}

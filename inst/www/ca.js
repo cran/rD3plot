@@ -107,6 +107,7 @@ var texts = {
     speed: "Velocitat",
     searchintable: "Cerca a la taula ",
     goback: "Tornar",
+    home: "Home",
     newtab: "Obriu a la pestanya nova",
     tools: "Eines",
     poweredby: "Fet amb",
@@ -123,5 +124,8 @@ var texts = {
     showonlyselecteditems: "Mostra només ítems seleccionats",
     Variable: "Variable",
     Value: "Valor",
-    highlightneighbors: "Ressaltar veïns"
+    highlightneighbors: "Ressaltar veïns",
+    clearfilters: "Filtres nets",
+    close: "tancar",
+    filtermenu: "Menu de filtres"
   };

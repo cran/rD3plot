@@ -107,6 +107,7 @@ var texts = {
     speed: "Speed",
     searchintable: "Search in table",
     goback: "Return",
+    home: "Home",
     newtab: "Open in new tab",
     tools: "Tools",
     poweredby: "Powered by",
@@ -123,5 +124,8 @@ var texts = {
     showonlyselecteditems: "Show only selected items",
     Variable: "Variable",
     Value: "Value",
-    highlightneighbors: "Highlight neighbors"
+    highlightneighbors: "Highlight neighbors",
+    clearfilters: "Clear filters",
+    close: "Close",
+    filtermenu: "Filter menu"
   };

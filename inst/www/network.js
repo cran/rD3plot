@@ -29,7 +29,7 @@ function network(Graph){
       nodeSizeRange = [0.5,4], // node size range
       nodeLabelSizeRange = [8,20], // node label size range
       nodeBorderRange = [1,3], // node border range
-      linkWeightRange = [200,40], // link weight range (link distance)
+      linkWeightRange = [200,0], // link weight range (link distance)
       linkWidthRange = [1,5], // link width range
       zoomRange = [0.1, 10], // zoom range
       chargeRange = [0,-1000], // charge range
@@ -93,9 +93,12 @@ function network(Graph){
       .attr("class", "sidebar")
       .style("width", (sidebarWidth) + "px")
 
-  var legendPanel = panel.append("div")
+  var legendPanel = false;
+  if(typeof options.showLegend != "undefined"){
+    legendPanel = panel.append("div")
       .attr("class", "legend-panel")
       .style("width", (sidebarWidth) + "px")
+  }
 
   if(typeof options.showNodes != "undefined" || typeof options.showLinks != "undefined"){
     panel.append("div")
@@ -621,6 +624,9 @@ function network(Graph){
     options.showExport = showControls(options,3);
     options.showNodes = showControls(options,4);
     options.showLinks = showControls(options,5);
+    options.showSearch = showControls(options,6);
+    options.showZoom = showControls(options,7);
+    options.showLegend = showControls(options,8);
 
     if(!GraphLinksLength){
       options.showLinks = undefined;
@@ -699,20 +705,20 @@ function displayMain(){
   main.selectAll("*").remove();
   if(options.multipages){
     main.append("button").attr("class","primary home").text(texts.goback).attr("title",texts.goback).on("click",function(){
-      window.location.href = "../../index.html";
+      window.history.back();
     })
   }
-  if(typeof multiGraph != 'undefined'){
-      multiGraph.graphSelect(main.append("span"));
+  if(options.multigraph){
+      multiGraphSelect(main.append("span"),options.multigraph.idx,options.multigraph.names);
   }
-  if(options.main && typeof multiGraph != 'undefined'){
+  if(options.main && options.multigraph){
       main.append("span").attr("class","separator").text("/");
   }
   if(options.main){
       main.append("span")
         .attr("class", "title")
         .html(typeof options.main == "string" ? options.main : options.main[0])
-        .style("color",typeof multiGraph != 'undefined' ? "#777777" : null);
+        .style("color",options.multigraph ? "#777777" : null);
   }
   if(options.help){
         main.call(iconButton()
@@ -994,8 +1000,7 @@ function displayButton(sel,txt,clk,tooltip,enable,classes){
 
 function displaySidebar(){
 
-  if(sidebar.select(".subSearch").empty()){
-
+  if(options.showSearch && sidebar.select(".subSearch").empty()){
     sidebar.append("div")
       .attr("class","subSearch")
       .call(displayMultiSearch()
@@ -1005,7 +1010,7 @@ function displaySidebar(){
         .updateFilter(switchEgoNet));
 
   }else{
-    sidebar.selectAll("div.sidebar>div:not(.subSearch)").remove();
+    sidebar.selectAll("div.sidebar > div:not(.subSearch)").remove();
   }
 
   if(options.showSidebar){
@@ -1122,9 +1127,11 @@ function displaySidebar(){
     function subSidebarHeight(tab){
       subSidebar.selectAll(".tab").style("height",null);
       var maxHeight = height
-      - sidebar.select(".sidebar > .subSearch").node().offsetHeight
       - nav.node().offsetHeight
       - 60;
+      if(options.showSearch){
+        maxHeight = maxHeight - sidebar.select(".sidebar > .subSearch").node().offsetHeight;
+      }
       if(options.note){
         maxHeight = maxHeight - 24;
       }
@@ -1485,15 +1492,21 @@ function addVisualController(){
             .attr("title",function(d){ return texts[d+"Info"]; });
 
     sels.each(function(visual){
-      var attributes = Graph[item+"names"].filter(function(d){
+      var attributes = [];
+      if(visual=="Image"){
+        attributes = options.imageNames.map(String);
+      }else{
+        attributes = Graph[item+"names"].filter(function(d){
           if(!hiddenFields.has(d) && (items!="links" || (options.linkSource!=d && options.linkTarget!=d))){
             var t = dataType(data,d,true);
-            if(!((onlyNumeric.indexOf(visual)!=-1 && t!="number") || (visual=="Image" && options.imageNames.indexOf(d)==-1))){
+            if(!(onlyNumeric.indexOf(visual)!=-1 && t!="number")){
               return true;
             }
           }
           return false;
-        }).map(function(d){ return [d,d]; });
+        });
+      }
+      attributes = attributes.map(function(d){ return [d,d]; });
       attributes.unshift(["_none_","-"+texts.none+"-"]);
 
       d3.select(this).append("div")
@@ -1502,12 +1515,6 @@ function addVisualController(){
       .on("change", function(){
         var attr = this.value;
         applyAuto(item+visual,attr);
-        if((visual=="Color"|| visual=="Group") && dataType(data,attr) == "number"){
-          displayPicker(options,item+visual,function(){
-            delete VisualHandlers[item+visual];
-            drawNet();
-          });
-        }
         if(visual=="Order" && Graph.nodenames.indexOf(attr)!=-1){
           var win = displayWindow(200);
           win.append("h2")
@@ -1642,6 +1649,15 @@ function addFilterController(){
           applyValueSelection();
           filterLinkSelection();
         })
+
+      itemFilter.append("button")
+        .attr("class","primary")
+        .text(texts.isolate)
+        .attr("title",texts.isolateInfo)
+        .on("click",function(){
+          applyValueSelection();
+          isolateLinkSelection();
+        })
     }
 
     itemFilter.append("button")
@@ -1673,7 +1689,7 @@ function addFilterController(){
       slider = false;
       selectMultiple = false;
       var tmpData = items=="nodes" ? Graph.nodes.filter(checkSelectableNode) : Graph.links.filter(checkSelectableLink);
-      var type = dataType(tmpData,val);
+      var type = dataType(tmpData,val,true);
       if(type == 'number'){
         var extent = d3.extent(tmpData, function(d){ return d[val]; }),
             mid = (extent[0]+extent[1])/2;
@@ -1845,7 +1861,9 @@ function checkInitialFilters(){
 // draw canvas and svg environment for plot
 function drawSVG(){
 
-  legendPanel.style("left",(width - sidebarWidth + 10) + "px")
+  if(legendPanel){
+    legendPanel.style("left",(width - sidebarWidth + 10) + "px")
+  }
 
   adaptLayout();
 
@@ -2109,6 +2127,9 @@ function drawSVG(){
       })
       .append("title").text(texts.zoomout + " (ctrl + '-')")
 
+  if(!options.showZoom){
+    svg.selectAll(".zoombutton").style("display","none");
+  }
 
   if(frameControls){
     handleFrames(frameControls.frame);
@@ -2439,7 +2460,9 @@ function drawNet(){
 
   var ctx = d3.select(".plot canvas").node().getContext("2d");
 
-  legendPanel.selectAll("*").remove();
+  if(legendPanel){
+    legendPanel.selectAll("*").remove();
+  }
 
   if(Graph.tree){
     var hideChildren = function(d){
@@ -2865,11 +2888,19 @@ function drawNet(){
     }
 
     // display legends
-    var legendLegend = options.nodeLegend ? true : false,
-        legendColor = options.nodeColor && dataType(nodes,options.nodeColor)!='number',
-        legendShape = options.nodeShape ? true : false,
-        legendImage = (!options.heatmap && options.imageItem) && (options.imageItems && options.imageNames),
-        legendLcolor = options.linkColor && dataType(links,options.linkColor)!='number';
+    var legendLegend = false,
+        legendColor = false,
+        legendShape = false,
+        legendImage = false,
+        legendLcolor = false;
+
+    if(legendPanel){
+      legendLegend = options.nodeLegend ? true : false;
+      legendColor = options.nodeColor && dataType(nodes,options.nodeColor,true)!='number';
+      legendShape = options.nodeShape ? true : false;
+      legendImage = (!options.heatmap && options.imageItem) && (options.imageItems && options.imageNames);
+      legendLcolor = options.linkColor && dataType(links,options.linkColor,true)!='number';
+    }
 
     Legends = {};
     var data;
@@ -3003,22 +3034,18 @@ function drawNet(){
 
       var gSelectAll = legendBottomControls.append("div")
         .attr("class","legend-selectall")
-      displaycheck(gSelectAll,function(self){
-        Graph.nodes.forEach(function(d){
-            if(self.selected && checkSelectableNode(d)){
-              d.selected = true;
-            }else{
-              delete d.selected;
+        .style("cursor","pointer")
+        .on("click",function(){
+          var selected = !this.selected;
+          div.selectAll(".legend-item > .legend-check-box").each(function(){
+            if(!selected ^ d3.select(this).classed("checked")){
+              this.parentNode.click();
             }
+            this.parentNode.click();
+          })
         });
-        Graph.links.forEach(function(d){
-            if(self.selected && checkSelectableLink(d)){
-              d.selected = true;
-            }else{
-              delete d.selected;
-            }
-        });
-      });
+      gSelectAll.append("div")
+        .attr("class","legend-check-box")
       gSelectAll.append("span")
         .text(texts.selectall)
 
@@ -3445,7 +3472,7 @@ function drawNet(){
       doc.text(12, height-12, this.textContent);
     })
 
-    if(!legendPanel.empty()){
+    if(legendPanel && !legendPanel.empty()){
       // scale
       if(!legendPanel.select(".scale").empty()) {
           var gradient = legendPanel.select(".legend-scale-gradient");
@@ -3583,7 +3610,10 @@ function showTooltip(node,fixed){
              .attr("class","tooltip"+(fixed?" fixed":""))
              .datum(node)
              .html(node[options.nodeText])
-        tooltip.select(".tooltip > .info-template > h2.auto-color").style("background-color",options.nodeColor ? VisualHandlers.nodeColor(node) : options.defaultColor);
+        tooltipTemplateAutoColor(tooltip,options.nodeColor ? VisualHandlers.nodeColor(node) : options.defaultColor);
+        if(options.imageItems){
+          tooltip.select(".info-template, .panel-template").select("img[src=_auto_]").attr("src",node[options.imageItems]);
+        }
     }
 }
 
@@ -3614,6 +3644,10 @@ function clickNet(){
     }
     if(options.nodeInfo){
       infoPanel.changeInfo(node[options.nodeInfo]);
+      body.select(".panel-template.auto-color").datum(node);
+      if(options.imageItems){
+        body.select(".panel-template img[src=_auto_]").attr("src",node[options.imageItems]);
+      }
     }
   }else{
     if(d3.event.shiftKey && options.heatmap){
@@ -4060,7 +4094,7 @@ function setColorScale(){
   }
 
   config.exports.displayScale = function(){
-    if(config.scale && config.datatype == "number"){
+    if(legendPanel && config.scale && config.datatype == "number"){
       var selectionWindow = attrSelectionWindow()
             .visual("Color")
             .active(config.key)
@@ -4098,7 +4132,7 @@ function setColorScale(){
 function getNumAttr(data,itemAttr,range,def){
     if(options[itemAttr]){
       if(data.length){
-        if(dataType(data,options[itemAttr]) == "number"){
+        if(dataType(data,options[itemAttr],true) == "number"){
           var item = itemAttr.slice(0,4),
               attrDomain;
           if(options[item+"Bipolar"])
@@ -4371,7 +4405,7 @@ function displayLegend(){
     var selectionWindow = attrSelectionWindow()
             .visual(type)
             .active(options[item+type])
-            .list(Graph[item+"names"].filter(function(d){ return !hiddenFields.has(d); }))
+            .list(type=="Image" ? options.imageNames : Graph[item+"names"].filter(function(d){ return !hiddenFields.has(d); }))
             .clickAction(function(val){
               applyAuto(item+type,val);
             });
@@ -4389,8 +4423,16 @@ function displayLegend(){
       .data(data)
     .enter().append("div")
       .attr("class","legend-item")
+      .property("item",true)
+      .style("cursor","pointer")
+    .on("click",function(){
+      this.selected = !this.selected;
+      var self = d3.select(this),
+          selected = this.selected;
+      self.select(".legend-check-box").classed("checked",selected);
 
-    displaycheck(row,function(self){
+      checkSelectAll();
+
       var compare = function(value){
         value = String(value);
         Graph[item+"s"].forEach(function(d){
@@ -4398,7 +4440,7 @@ function displayLegend(){
             delete d.selected;
           }
           if(checkLegendKeyValue(d,key,value)){
-            if(self.selected && checkSelectable(d)){
+            if(selected && checkSelectable(d)){
               d.selected = true;
             }else{
               delete d.selected;
@@ -4424,9 +4466,13 @@ function displayLegend(){
           return i>=first && i<=last;
         }).each(compare);
       }else{
-        compare(d3.select(self).datum());
+        compare(self.datum());
       }
-    },true);
+      showTables();
+    });
+
+    row.append("div")
+    .attr("class","legend-check-box")
 
     if(type == "Image"){
       row.append("img")
@@ -4474,6 +4520,15 @@ function displayLegend(){
 
     row.append("span")
       .text(text)
+
+    function checkSelectAll(){
+      var divLegends = d3.select(parent.node().parentNode);
+      var gSelectAll = divLegends.select(".legend-bottom-controls > .legend-selectall");
+      var itemsSize = legend.selectAll(".legend-item").size(),
+          checkedSize = legend.selectAll(".legend-item > .checked").size();
+      gSelectAll.select(".legend-check-box").classed("checked", gSelectAll.node().selected = checkedSize ? true : false);
+      divLegends.selectAll("button.legend-bottom-button").classed("disabled", !checkedSize || checkedSize==itemsSize);
+    }
   }
 
   exports.type = function(x) {
@@ -4535,29 +4590,12 @@ function displayLegend(){
   return exports;
 }
 
-// render checkbox
-function displaycheck(sel,callback,item){
-
-    if(item){
-      sel.property("item",true);
-    }
-
-    sel.append("div")
-    .attr("class","legend-check-box")
-
-    sel.style("cursor","pointer")
-    .on("click",function(){
-      this.selected = !this.selected;
-      callback(this);
-      showTables();
-    })
-}
-
 function checkLegendKeyValue(d,key,value){
   return String(d[key])==value || (d[key] && (typeof d[key] == "object" && (d[key].indexOf(value)!=-1 || d[key].join(",")==value)));
 }
 
 function displayBottomButton(sel,text,tooltip,nodesCallback,linksCallback){
+    if(legendPanel){
       sel.append("button")
         .attr("class","legend-bottom-button primary disabled")
         .text(texts[text])
@@ -4587,6 +4625,7 @@ function displayBottomButton(sel,text,tooltip,nodesCallback,linksCallback){
           }
         })
         .attr("title",tooltip)
+    }
 }
 
 function getImageName(path){
@@ -4641,6 +4680,10 @@ function showTables() {
   }
 
   tables.call(tableInst);
+
+  panelTemplateAutoColor(body,function(node){
+    return options.nodeColor && node ? VisualHandlers.nodeColor(node) : options.defaultColor;
+  });
 
   // update frequency bars
   if(frequencyBars && options.frequencies){
@@ -4858,9 +4901,6 @@ function showTables() {
   // update sidebar filter selected
   updateSidebarFilters();
 
-  // check legend items checked
-  checkLegendItemsChecked();
-
   // enable/disable selection buttons
   if(selectedNodesData.length){
     d3.selectAll("button.primary.selectneighbors, button.primary.isolate, button.primary.filter").classed("disabled",!(selectedNodesData.length<nodesData.length));
@@ -4929,49 +4969,6 @@ function renderLinkCell(item,key){
     return formatter(txt);
   }
   return String(txt);
-}
-
-// check checkboxes after node selections
-function checkLegendItemsChecked() {
-    var parent = legendPanel.select(".legends > div.legends-content"),
-        legendSelectAll = legendPanel.select(".legend-selectall");
-    if(!legendSelectAll.empty()){
-      checkItems("nodes",checkSelectableNode);
-      checkItems("links",checkSelectableLink);
-
-      var items = parent.selectAll(".legend-item");
-      if(!items.empty()){
-        var size = items.filter(function(){ return this.selected; }).size();
-        checkInBox(legendSelectAll.node(), size ? true : false);
-        legendPanel.selectAll("button.legend-bottom-button").classed("disabled",!size || size==items.size());
-      }
-    }
-
-    function checkItems(itemsname,checkSelectable){
-      var items = parent.selectAll(".legend."+itemsname+" > .legend-item"),
-          unselected, key, i, d;
-      if(!items.empty()){
-        unselected = Graph[itemsname].filter(checkSelectable).filter(function(d){ return !d.selected; });
-        items.each(function(value){
-          checkInBox(this,true);
-          key = this.parentNode.key;
-          for(i = 0; i<unselected.length; i++){
-            d = unselected[i];
-            if(checkLegendKeyValue(d,key,value)){
-              checkInBox(this,false);
-              break;
-            }
-          }
-        })
-      }
-    }
-
-    // visually mark/unmark checkbox
-    function checkInBox(thiz,select){
-        var checkBox = d3.select(thiz).select(".legend-check-box");
-        thiz.selected = select;
-        checkBox.classed("checked",select)
-    }
 }
 
 function tables2xlsx(){
@@ -5292,7 +5289,6 @@ function svg2png(callback){
   ctx.fillStyle = basicColors.white;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  svg.selectAll(".zoombutton").style("display","none");
   if(options.main){
     svg.append("text")
       .attr("class","main")
@@ -5323,7 +5319,6 @@ function svg2png(callback){
 
   svg.select("svg>text.main").remove()
   svg.select("svg>text.note").remove()
-  svg.selectAll(".zoombutton").style("display",null);
 }
 
 function svg2pdf(){
@@ -5421,8 +5416,6 @@ window.onresize = function(){
 
 } // network function end
 
-if(typeof multiGraph == 'undefined'){
-  window.onload = function(){
-    network(JSON.parse(d3.select("#data").text()));
-  };
-}
+window.onload = function(){
+  network(JSON.parse(d3.select("#data").text()));
+};

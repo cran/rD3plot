@@ -66,18 +66,20 @@ function tutorialTour(options){
   });
 
   // description
-  steps.push(function(){
-    tutorial.style("top",(dim.height/4)+"px")
-    tutorial.style("left",(dim.width/4)+"px")
-    tutorialContent.selectAll("*").remove()
+  if(options.tutorial.description){
+    steps.push(function(){
+      tutorial.style("top",(dim.height/4)+"px")
+      tutorial.style("left",(dim.width/4)+"px")
+      tutorialContent.selectAll("*").remove()
 
-    tutorialContent.append("p").html(tutorial_texts['mainpage'])
-    tutorialContent.append("p").html(options.tutorial.description ? options.tutorial.description : tutorial_texts['collectionofelements'])
-    tutorialContent.append("p").html(tutorial_texts['eachfigure'])
+      tutorialContent.append("p").html(tutorial_texts['mainpage'])
+      tutorialContent.append("p").html(options.tutorial.description)
+      tutorialContent.append("p").html(tutorial_texts['eachfigure'])
 
-    tutorialArrow.style("display","none")
-    tutorial2.style("display","none")
-  });
+      tutorialArrow.style("display","none")
+      tutorial2.style("display","none")
+    });
+  }
 
   // actions
   if(options.nodeText || options.nodeInfo){
@@ -116,9 +118,10 @@ function tutorialTour(options){
   }
 
   // filter
-  if(topbar.select("h3.top-filter").node().offsetWidth){
+  var topFilter = topbar.select("h3.top-filter");
+  if(!topFilter.empty() && topFilter.node().offsetWidth){
     steps.push(function(){
-      var filterDim = topbar.select("h3.top-filter").node().getBoundingClientRect();
+      var filterDim = topFilter.node().getBoundingClientRect();
       tutorialContent.selectAll("*").remove()
       tutorialArrow.style("display",null)
         .style("transform",null)

@@ -3,7 +3,7 @@ wwwDirectory = function(){
   return(path)
 }
 
-createHTML <- function(directory, styles, dependencies, json){
+createHTML <- function(directory, styles, dependencies, json, fixed_viewport = FALSE){
   indexfile <- paste(directory, "index.html", sep = "/")
   if(file.exists(directory)){
     if(file.exists(indexfile)){
@@ -25,6 +25,10 @@ createHTML <- function(directory, styles, dependencies, json){
   name <- name[length(name)]
   html <- sub("titulo", name, html)
 
+  if(fixed_viewport){
+    html <- sub("<!--netCoin Project-->", '<meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no" />\n<!--netCoin Project-->', html)
+  }
+
   scripts <- "<!--scripts-->"
   if(length(styles)){
     dir.create(paste(directory, "styles", sep = "/"),FALSE)
@@ -32,7 +36,7 @@ createHTML <- function(directory, styles, dependencies, json){
   for(i in styles){
     scripts <- paste(scripts, paste0("<link rel=\"stylesheet\" type=\"text/css\" href=\"styles/",i,"\"></link>"), sep = "\n")
     file.copy(paste(www, i, sep = "/"), paste(directory, "styles", sep = "/"))
-    if(i=="styles.css"){
+    if(i=="styles.css" || i=="styles2.css"){
       for(font in c("Roboto-Regular-latin.woff2","Roboto-Regular-latin-ext.woff2")){
         file.copy(paste(www, font, sep = "/"), paste(directory, "styles", sep = "/"))
       }
