@@ -1,10 +1,10 @@
-f81a49f6a459097b4a02e5e99eadf821 *DESCRIPTION
-9ae83945add07f588f7fedb7bd9643d8 *NAMESPACE
+1ea328dfd9bc3b07aa21133ecd10cff3 *DESCRIPTION
+2c75eef3137ef83516cec7caea24b10c *NAMESPACE
 2ad6594c305a231892ae932deb478572 *R/barplot.R
 cfe1b8bd098f438054d67f52350cbf1b *R/gallery.R
 de952d2e41bed85a1e6336ca7c502cb5 *R/layouts.R
-c8fff241dad778cefd094a3111f392c0 *R/methods.R
-e983df02ea97424f7aa9791ad2d1f4e6 *R/multigraph.R
+083fca1da81d268e4108f0415d70fe43 *R/methods.R
+3a14c93905ea284d533b6a5d49b04963 *R/multigraph.R
 7a46a9575aa00a5af4b6099feca6b0a0 *R/network.R
 232506fc8cb7ecd8b86354ddc558078c *R/pie.R
 8c3eea663772af8475bdc608936a0c05 *R/timeline.R
@@ -38,9 +38,9 @@ d8a6b4b61b44d585956be3a6844be798 *inst/www/d3.layout.cloud.js
 f4564294d1f9e726cacca5cc83b8beca *inst/www/d3.min.js
 4be2f72527e3c8310655849e541f095d *inst/www/en.js
 1c3076f2f35170f34acefca5ff8c48eb *inst/www/es.js
-336bea571267f328d75cdd4a29f8dc45 *inst/www/functions.js
+66f0bc6fb9a9b6285af2061b5291d76c *inst/www/functions.js
 aa1c6eac3607586d83f4617205fe5492 *inst/www/gallery.js
-546108348e46d7753e01ef36939449f2 *inst/www/gallery2.js
+2d73c133b826dc0ff7ef950be9c669cc *inst/www/gallery2.js
 5f6da7f3ae707e89f7ba0f38c4d8febb *inst/www/gallerytree.js
 c0b04ade1f7102a121c95ceb8fe53e4a *inst/www/gallerytree2.js
 661632b56b07ef506484bc0c4769d789 *inst/www/help_es.html
@@ -52,7 +52,7 @@ bf33cb23dbe71657b6c5fccb1f1dd92e *inst/www/jszip.min.js
 5dd4584c30b1ee4ca8ec28c149322a22 *inst/www/multigraph.js
 929b78f3fe70a85c52fb4c8d85aae9d2 *inst/www/multipages.css
 dee2e102efeb27eff225f1699e5c7472 *inst/www/multipages.js
-38a54fd6d38a918de585edf693f8985d *inst/www/network.js
+09175bc3ba0ecaf62319768fe7794f31 *inst/www/network.js
 9a990b4b753e4d3a5e04debfb7b79046 *inst/www/pie.js
 fa01a11574b9fb43f8fcd4f76272d1e2 *inst/www/polygraph.js
 99e5fd9935026897722d6fd47e2fdba2 *inst/www/reset.css
@@ -67,7 +67,7 @@ e0044b266c7f945a740e0c9a56e8b38e *inst/www/tutorial_en.js
 54e6c1db83135150c3ece56bc6d57721 *inst/www/tutorial_es.js
 d33f124210804be5e221c52ae612bb8b *man/add_tutorial_rd3.Rd
 2891aa681ad70984f1b3ffdc449e591b *man/barplot_rd3.Rd
-b4e4037dda24698b440ab84cdc97f1bb *man/evolNetwork_rd3.Rd
+e144626ed5bd9e3fb0f385590c283758 *man/evolNetwork_rd3.Rd
 971dd399864e043db1ab3787dcbe8613 *man/finches.Rd
 56a1bfc171d5eac9dce06c1de9f8f626 *man/galapagos.Rd
 e802759212d7bab243f374f127e80a8a *man/gallery2_rd3.Rd

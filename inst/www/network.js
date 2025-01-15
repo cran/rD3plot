@@ -76,6 +76,8 @@ function network(Graph){
     .style("position","absolute")
     .style("height", (computeHeight() - 45) + "px")
 
+  var multiSearch = options.showSearch ? displayMultiSearch() : false;
+
   // main bar
   var main = body.append("div")
         .attr("class", "main")
@@ -705,7 +707,7 @@ function displayMain(){
   main.selectAll("*").remove();
   if(options.multipages){
     main.append("button").attr("class","primary home").text(texts.goback).attr("title",texts.goback).on("click",function(){
-      window.history.back();
+      window.location.href = "../../index.html";
     })
   }
   if(options.multigraph){
@@ -1000,15 +1002,14 @@ function displayButton(sel,txt,clk,tooltip,enable,classes){
 
 function displaySidebar(){
 
-  if(options.showSearch && sidebar.select(".subSearch").empty()){
-    sidebar.append("div")
-      .attr("class","subSearch")
-      .call(displayMultiSearch()
-        .data(Graph.nodes.filter(checkSelectableNode))
+  if(multiSearch && sidebar.select(".subSearch").empty()){
+    multiSearch.data(Graph.nodes.filter(checkSelectableNode))
         .column(options.nodeLabel ? options.nodeLabel : options.nodeName)
         .updateSelection(showTables)
-        .updateFilter(switchEgoNet));
-
+        .updateFilter(switchEgoNet);
+    sidebar.append("div")
+      .attr("class","subSearch")
+      .call(multiSearch);
   }else{
     sidebar.selectAll("div.sidebar > div:not(.subSearch)").remove();
   }
@@ -2453,6 +2454,10 @@ function frameStep(value){
         if(frameControls.frame==frameControls.frames.length-1 && !frameControls.loop){
           pauseFrames();
         }
+
+    if(multiSearch){
+      multiSearch.data(Graph.nodes.filter(checkSelectableNode));
+    }
 }
 
 function drawNet(){  
@@ -2947,18 +2952,18 @@ function drawNet(){
         if(typeof b != "string"){
           b = b[0];
         }
-        return [a,b];
+        return [a,b,a+"|"+b];
       })
       data.sort(function(a,b){
           return sortAsc(a[0],b[0]);
       })
-      var data2 = d3.map(data, function(d){ return d[0]; }).keys();
-      data = d3.map(data, function(d){ return d[1]; }).keys()
+      var datakeys = data.map(function(d){ return d[2]; });
+      data = data.filter(function(value, index, array) {
+        return datakeys.indexOf(value[2]) === index;
+      })
+      var data2 = data.map(function(d){ return d[0]; });
+      data = data.map(function(d){ return d[1]; });
       var textFunc = function(d,i){ return data2[i]; };
-      if(data2.length!=data.length){
-        title = options.imageItem;
-        textFunc = getImageName;
-      }
       Legends.image = displayLegend()
         .type("Image")
         .key(options.imageItem)
@@ -4191,11 +4196,24 @@ function filterSelection(){
 }
 
 function filterLinkSelection(){
+  if(frameControls){
+    var selected = Graph.links.filter(function(d){
+        return d.selected;
+    }).map(function(d){
+        return d[options.linkSource] + "-" + d[options.linkTarget];
+    });
+    Graph.links.forEach(function(d){
+      if(!d.selected && selected.indexOf(d[options.linkSource] + "-" + d[options.linkTarget])==-1){
+        d._hidden = true;
+      }
+    });
+  }else{
     Graph.links.forEach(function(d){
       if(!d.selected)
         d._hidden = true;
     });
-    drawNet();
+  }
+  drawNet();
 }
 
 function isolateLinkSelection(){
